@@ -1,0 +1,11 @@
+# Rust build artifacts
+/target
+**/*.rs.bk
+*.pdb
+
+# Editor / OS noise
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
