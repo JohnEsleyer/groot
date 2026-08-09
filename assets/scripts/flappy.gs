@@ -45,6 +45,7 @@ func ResetGame() {
     SpawnPipe(500.0)
     SpawnPipe(700.0)
 
+    groot.SetScoreDisplay(score, highScore)
     groot.Log("FLAPPY BIRD STARTED")
 }
 
@@ -56,6 +57,7 @@ func OnUpdate(dt float64) {
     if gameState == 0 {
         birdY = math.Sin(time.Now() * 5.0) * 12.0
         groot.SetPosition(birdX, birdY)
+        groot.SetScoreDisplay(score, highScore)
 
         if spacePressed {
             ResetGame()
@@ -95,6 +97,7 @@ func OnUpdate(dt float64) {
                 if score > highScore {
                     highScore = score
                 }
+                groot.SetScoreDisplay(score, highScore)
                 groot.Log(fmt.Sprintf("Score: %d | High: %d", score, highScore))
             }
 

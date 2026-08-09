@@ -1944,6 +1944,7 @@ dependencies = [
 [[package]]
 name = "goscript"
 version = "0.1.0"
+source = "git+https://github.com/johnesleyer/goscript?branch=main#897b7700a11b3e9c3264fed5f4bfab2794eef49a"
 
 [[package]]
 name = "gpu-alloc"

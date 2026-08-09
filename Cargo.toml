@@ -4,13 +4,21 @@ version = "0.1.0"
 edition = "2021"
 description = "Groot: a fast-iteration game engine pairing Bevy with the GoScript embedded scripting VM"
 
+# The `groot-cli` binary scaffolds, runs, and builds Groot projects:
+#   cargo run --bin groot-cli -- new my-game
+#   cargo run --bin groot-cli -- run
+#   cargo run --bin groot-cli -- build
+[[bin]]
+name = "groot-cli"
+path = "src/bin/cli.rs"
+
 [dependencies]
 bevy = "0.13"
 
-# GoScript scripting crate. Uses a local path while `goscript` is unreleased.
-# Switch to the published/git dependency once it exists:
-# goscript = { git = "https://github.com/JohnEsleyer/goscript" }
-goscript = { path = "../../012-goscript/goscript" }
+# GoScript scripting crate, fetched from the upstream GitHub repository.
+# Local development of goscript happens in a sibling checkout and is pushed
+# here; a published crates.io release can replace this once available.
+goscript = { git = "https://github.com/johnesleyer/goscript", branch = "main" }
 
 [profile.dev]
 opt-level = 1

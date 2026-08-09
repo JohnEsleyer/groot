@@ -2,7 +2,9 @@ mod groot_module;
 mod groot_plugin;
 
 use bevy::prelude::*;
-use groot_plugin::{Bird, GoScriptComponent, GrootPlugin, PipeIndex};
+use groot_plugin::{
+    Bird, GoScriptComponent, GrootPlugin, PipeIndex, ScoreText, ScriptColor, ScriptTransform,
+};
 
 fn main() {
     App::new()
@@ -39,6 +41,30 @@ fn setup_game(mut commands: Commands) {
             entity_id: 1,
             tag: "Bird".into(),
         },
+        ScriptTransform {
+            x: -50.0,
+            y: 0.0,
+            ..default()
+        },
+        ScriptColor(Color::rgb(0.95, 0.8, 0.2)),
+    ));
+
+    // Score HUD — top-center text, updated by flappy.gs via SetScoreDisplay
+    commands.spawn((
+        Text2dBundle {
+            text: Text::from_section(
+                "Score: 0  Best: 0",
+                TextStyle {
+                    font_size: 28.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            )
+            .with_justify(JustifyText::Center),
+            transform: Transform::from_xyz(0.0, 260.0, 20.0),
+            ..default()
+        },
+        ScoreText,
     ));
 
     // Ground — visual green strip at bottom
