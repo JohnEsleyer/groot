@@ -1,6 +1,6 @@
 // enemy.gs — Hybrid Component-Behavior Enemy Script
 // Demonstrates: struct state, receiver methods, self-context, distance queries,
-// collision rectangles, event emitting, and debug visualization.
+// collider data, event emitting. All rendering is handled by the host engine.
 
 type Enemy struct {
     PatrolSpeed float64
@@ -29,14 +29,12 @@ func OnUpdate(dt float64) {
     var dist = groot.GetDistance(selfId, 1)
     if dist < 120.0 {
         groot.Warn(fmt.Sprintf("Player detected! Distance: %.1f", dist))
-        groot.DrawDebugRect(newX, py, 70.0, 70.0, 1.0, 0.3, 0.0)
+        // Wider detection hitbox as data — the engine renders the overlay.
+        groot.SetSelfCollider(70.0, 70.0)
         groot.EmitEvent("EnemyAlert", dist)
     } else {
-        groot.DrawDebugRect(newX, py, 60.0, 60.0, 0.8, 0.2, 0.8)
+        groot.SetSelfCollider(60.0, 60.0)
     }
-
-    // 3. Debug circle
-    groot.DrawDebugCircle(newX, py, 25.0, 0.5, 0.5, 0.0)
 
     groot.Log(fmt.Sprintf("enemy pos=(%.1f,%.1f) timer=%.1f dist=%.1f",
         newX, py, enemy.Timer, dist))

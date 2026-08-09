@@ -50,13 +50,16 @@ func ResetGame() {
 }
 
 func OnUpdate(dt float64) {
+    // Declare hitbox *data*; the engine draws/uses it. Scripts never render.
+    groot.SetSelfCollider(birdRadius * 2.0, birdRadius * 2.0)
+
     var spaceDown = groot.IsKeyDown("Space")
     var spacePressed = spaceDown && !spaceWasDown
     spaceWasDown = spaceDown
 
     if gameState == 0 {
         birdY = math.Sin(time.Now() * 5.0) * 12.0
-        groot.SetPosition(birdX, birdY)
+        groot.SetSelfPosition(birdX, birdY)
         groot.SetScoreDisplay(score, highScore)
 
         if spacePressed {
@@ -140,7 +143,7 @@ func OnUpdate(dt float64) {
             pipes = newPipes
         }
 
-        groot.SetPosition(birdX, birdY)
+        groot.SetSelfPosition(birdX, birdY)
         return
     }
 
@@ -155,7 +158,7 @@ func OnUpdate(dt float64) {
             }
         }
 
-        groot.SetPosition(birdX, birdY)
+        groot.SetSelfPosition(birdX, birdY)
 
         if spacePressed {
             ResetGame()

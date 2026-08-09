@@ -5,6 +5,7 @@ use std::sync::Mutex;
 
 use bevy::prelude::*;
 use goscript::{HotReloadEngine, Value};
+use serde::Deserialize;
 
 use crate::groot_module::GrootModuleExt;
 
@@ -22,9 +23,29 @@ pub struct GoScriptComponent {
     pub tag: String,
 }
 
-/// Marker for the Flappy Bird entity (the script entity that owns flappy.gs).
-#[derive(Component)]
-pub struct Bird;
+/// Axis-aligned box collider data for an entity. Declared by scripts as *data*
+/// (via `groot.SetSelfCollider`) and consumed by the host engine — collision
+/// math and debug visualization are the engine's job, never the script's.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct Collider {
+    pub width: f32,
+    pub height: f32,
+}
+
+/// Toggles host-side debug visualization (collider overlays). Rendering the
+/// overlay is the engine's responsibility; scripts only ever declare data.
+#[derive(Resource)]
+pub struct DebugRender {
+    pub show_colliders: bool,
+}
+
+impl Default for DebugRender {
+    fn default() -> Self {
+        Self {
+            show_colliders: true,
+        }
+    }
+}
 
 /// Identifies a pipe segment by index (position set by `groot.SetPipePosition`).
 #[derive(Component)]
@@ -56,20 +77,21 @@ impl Default for ScriptColor {
     }
 }
 
-/// Debug drawing command queued by `groot.DrawDebug*` calls.
-pub enum GizmoCommand {
-    Line(Vec2, Vec2, Color),
-    Circle(Vec2, f32, Color),
-    Rect(Vec2, Vec2, Color),
-}
-
-/// Entity spawn request queued by `groot.SpawnEntity`.
+/// Entity spawn request queued by `groot.SpawnEntity` / `groot.SpawnPrefab`.
 #[derive(Clone, Debug)]
-pub struct SpawnRequest {
-    pub script: String,
-    pub x: f32,
-    pub y: f32,
-    pub tag: String,
+pub enum SpawnRequest {
+    Prefab {
+        name: String,
+        x: f32,
+        y: f32,
+        tag: String,
+    },
+    Script {
+        script: String,
+        x: f32,
+        y: f32,
+        tag: String,
+    },
 }
 
 /// Custom gameplay event emitted by `groot.EmitEvent`.
@@ -77,6 +99,167 @@ pub struct SpawnRequest {
 pub struct ScriptEvent {
     pub name: String,
     pub payload: f64,
+}
+
+// ---------------------------------------------------------------------------
+// Project config (groot.toml) — data-driven visuals & scene
+// ---------------------------------------------------------------------------
+
+/// Top-level `groot.toml` project configuration. Graphics are *data*, not
+/// Rust: prefabs map a name to a sprite/text visual and an optional behavior
+/// script, and the scene lists the initial entities. No Rust is required to
+/// define what anything looks like.
+#[derive(Clone, Debug, Deserialize, Default, Resource)]
+pub struct GrootConfig {
+    #[serde(default)]
+    pub project: ProjectConfig,
+    #[serde(default)]
+    pub window: WindowConfig,
+    #[serde(default, rename = "prefab")]
+    pub prefabs: Vec<PrefabConfig>,
+    #[serde(default)]
+    pub scene: SceneConfig,
+}
+
+impl GrootConfig {
+    /// Load `groot.toml` from the given path, falling back to defaults (with a
+    /// warning) if the file is missing or malformed.
+    pub fn load(path: &str) -> Self {
+        let raw = match std::fs::read_to_string(path) {
+            Ok(raw) => raw,
+            Err(e) => {
+                bevy::log::warn!("[GROOT CONFIG] no '{path}' ({e}); using defaults");
+                return Self::default();
+            }
+        };
+        match toml::from_str(&raw) {
+            Ok(config) => config,
+            Err(e) => {
+                bevy::log::warn!("[GROOT CONFIG] failed to parse '{path}': {e}; using defaults");
+                Self::default()
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ProjectConfig {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub version: String,
+}
+
+impl Default for ProjectConfig {
+    fn default() -> Self {
+        Self {
+            name: "Groot".into(),
+            version: "0.1.0".into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct WindowConfig {
+    #[serde(default)]
+    pub title: String,
+    #[serde(default = "default_width")]
+    pub width: f32,
+    #[serde(default = "default_height")]
+    pub height: f32,
+}
+
+impl Default for WindowConfig {
+    fn default() -> Self {
+        Self {
+            title: "Groot".into(),
+            width: default_width(),
+            height: default_height(),
+        }
+    }
+}
+
+fn default_width() -> f32 {
+    800.0
+}
+fn default_height() -> f32 {
+    600.0
+}
+
+/// A named visual/behavior template. `kind` selects special host components:
+/// `"pipe"` spawns a sprite tagged with `PipeIndex`, `"score"` spawns the HUD
+/// text entity. Anything else spawns a plain sprite (optionally script-driven).
+#[derive(Clone, Debug, Deserialize)]
+pub struct PrefabConfig {
+    pub name: String,
+    #[serde(default)]
+    pub script: Option<String>,
+    #[serde(default)]
+    pub sprite: Option<SpriteConfig>,
+    #[serde(default)]
+    pub text: Option<TextConfig>,
+    #[serde(default)]
+    pub kind: Option<String>,
+    /// Optional collider box (`[width, height]`) attached to script entities.
+    #[serde(default)]
+    pub size: Option<[f32; 2]>,
+    #[serde(default)]
+    pub z: Option<f32>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct SpriteConfig {
+    #[serde(default = "default_sprite_size")]
+    pub size: [f32; 2],
+    #[serde(default = "default_color")]
+    pub color: [f32; 4],
+}
+
+fn default_sprite_size() -> [f32; 2] {
+    [32.0, 32.0]
+}
+fn default_color() -> [f32; 4] {
+    [1.0, 1.0, 1.0, 1.0]
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct TextConfig {
+    #[serde(default)]
+    pub value: String,
+    #[serde(default = "default_font_size")]
+    pub size: f32,
+    #[serde(default = "default_color")]
+    pub color: [f32; 4],
+    #[serde(default)]
+    pub z: f32,
+}
+
+fn default_font_size() -> f32 {
+    28.0
+}
+
+/// Initial entities listed under `[[scene.entity]]`.
+#[derive(Clone, Debug, Deserialize, Default)]
+pub struct SceneConfig {
+    #[serde(default, rename = "entity")]
+    pub entities: Vec<SceneEntityConfig>,
+}
+
+#[derive(Clone, Debug, Deserialize, Default)]
+pub struct SceneEntityConfig {
+    pub prefab: String,
+    #[serde(default)]
+    pub x: f32,
+    #[serde(default)]
+    pub y: f32,
+    #[serde(default)]
+    pub z: Option<f32>,
+    #[serde(default)]
+    pub entity_id: Option<u32>,
+    #[serde(default)]
+    pub pipe_index: Option<usize>,
+    #[serde(default)]
+    pub tag: String,
 }
 
 /// Per-entity runtime state. This lives in a thread-local scratch slot for the
@@ -92,6 +275,8 @@ struct EntityState {
     scale_x: f32,
     scale_y: f32,
     color: (f32, f32, f32, f32),
+    collider_w: f32,
+    collider_h: f32,
     destroy_requested: bool,
 }
 
@@ -128,13 +313,12 @@ thread_local! {
 // ---------------------------------------------------------------------------
 
 // These are intentionally kept as process-wide `static Mutex` buffers: scripts
-// run inside the execution system but spawn requests / events / gizmos are
-// drained by *other* systems in the schedule, and Bevy may schedule those on a
-// different worker thread. Entity *state* no longer needs this — it flows
-// through ECS components and the thread-local scratch above.
+// run inside the execution system but spawn requests / events are drained by
+// *other* systems in the schedule, and Bevy may schedule those on a different
+// worker thread. Entity *state* never uses these — it flows through ECS
+// components and the thread-local scratch above.
 static SPAWN_REQUESTS: Mutex<Vec<SpawnRequest>> = Mutex::new(Vec::new());
 static SCRIPT_EVENTS: Mutex<Vec<ScriptEvent>> = Mutex::new(Vec::new());
-static GIZMO_COMMANDS: Mutex<Vec<GizmoCommand>> = Mutex::new(Vec::new());
 
 // ---------------------------------------------------------------------------
 // Shared input state
@@ -217,7 +401,7 @@ impl GrootScriptHost {
                 });
 
                 let inp_mouse = Rc::clone(&self.input);
-                vm.register_fn("groot.GetMousePosition", move |_| {
+                vm.register_fn("groot.GetMouseWorld", move |_| {
                     let (mx, my) = inp_mouse.mouse_pos.get();
                     Value::Slice(Rc::new(RefCell::new(vec![
                         Value::Float(mx),
@@ -226,13 +410,13 @@ impl GrootScriptHost {
                 });
 
                 let inp_mdown = Rc::clone(&self.input);
-                vm.register_fn("groot.IsMouseButtonDown", move |args| {
+                vm.register_fn("groot.IsMouseDown", move |args| {
                     let btn = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as usize;
                     Value::Bool(inp_mdown.mouse_button_down.get()[btn.min(2)])
                 });
 
                 let inp_mpressed = Rc::clone(&self.input);
-                vm.register_fn("groot.IsMouseButtonPressed", move |args| {
+                vm.register_fn("groot.IsMousePressed", move |args| {
                     let btn = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as usize;
                     Value::Bool(inp_mpressed.mouse_button_pressed.get()[btn.min(2)])
                 });
@@ -254,20 +438,6 @@ impl GrootScriptHost {
                 });
 
                 vm.register_fn("groot.SetSelfPosition", |args| {
-                    let nx = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let ny = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    CURRENT_STATE.with(|st| {
-                        let mut s = st.borrow_mut();
-                        s.x = nx;
-                        s.y = ny;
-                    });
-                    Value::Nil
-                });
-
-                // `groot.SetPosition` targets the script entity itself, so it is
-                // an alias for `SetSelfPosition`. The Flappy demo uses it on the
-                // bird entity, which owns its script.
-                vm.register_fn("groot.SetPosition", |args| {
                     let nx = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
                     let ny = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
                     CURRENT_STATE.with(|st| {
@@ -317,6 +487,20 @@ impl GrootScriptHost {
                     Value::Nil
                 });
 
+                // Collider *data* declaration. The host engine owns collision
+                // math and any debug visualization; the script only says "my
+                // hitbox is w x h" and the engine draws/uses it.
+                vm.register_fn("groot.SetSelfCollider", |args| {
+                    let w = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    let h = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    CURRENT_STATE.with(|st| {
+                        let mut s = st.borrow_mut();
+                        s.collider_w = w;
+                        s.collider_h = h;
+                    });
+                    Value::Nil
+                });
+
                 vm.register_fn("groot.DestroySelf", |_| {
                     CURRENT_STATE.with(|st| st.borrow_mut().destroy_requested = true);
                     Value::Nil
@@ -349,66 +533,6 @@ impl GrootScriptHost {
                     Value::Float((dx * dx + dy * dy).sqrt() as f64)
                 });
 
-                // 5. Debug drawing
-                vm.register_fn("groot.DrawDebugLine", |args| {
-                    if args.len() >= 4 {
-                        let x1 = args[0].as_number().unwrap_or(0.0) as f32;
-                        let y1 = args[1].as_number().unwrap_or(0.0) as f32;
-                        let x2 = args[2].as_number().unwrap_or(0.0) as f32;
-                        let y2 = args[3].as_number().unwrap_or(0.0) as f32;
-                        let r = args.get(4).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                        let g = args.get(5).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
-                        let b = args.get(6).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                        if let Ok(mut cmds) = GIZMO_COMMANDS.lock() {
-                            cmds.push(GizmoCommand::Line(
-                                Vec2::new(x1, y1),
-                                Vec2::new(x2, y2),
-                                Color::rgb(r, g, b),
-                            ));
-                        }
-                    }
-                    Value::Nil
-                });
-
-                vm.register_fn("groot.DrawDebugCircle", |args| {
-                    if args.len() >= 3 {
-                        let cx = args[0].as_number().unwrap_or(0.0) as f32;
-                        let cy = args[1].as_number().unwrap_or(0.0) as f32;
-                        let radius = args[2].as_number().unwrap_or(10.0) as f32;
-                        let r = args.get(3).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                        let g = args.get(4).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
-                        let b = args.get(5).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                        if let Ok(mut cmds) = GIZMO_COMMANDS.lock() {
-                            cmds.push(GizmoCommand::Circle(
-                                Vec2::new(cx, cy),
-                                radius,
-                                Color::rgb(r, g, b),
-                            ));
-                        }
-                    }
-                    Value::Nil
-                });
-
-                vm.register_fn("groot.DrawDebugRect", |args| {
-                    if args.len() >= 4 {
-                        let cx = args[0].as_number().unwrap_or(0.0) as f32;
-                        let cy = args[1].as_number().unwrap_or(0.0) as f32;
-                        let w = args[2].as_number().unwrap_or(10.0) as f32;
-                        let h = args[3].as_number().unwrap_or(10.0) as f32;
-                        let r = args.get(4).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
-                        let g = args.get(5).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
-                        let b = args.get(6).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                        if let Ok(mut cmds) = GIZMO_COMMANDS.lock() {
-                            cmds.push(GizmoCommand::Rect(
-                                Vec2::new(cx, cy),
-                                Vec2::new(w, h),
-                                Color::rgb(r, g, b),
-                            ));
-                        }
-                    }
-                    Value::Nil
-                });
-
                 // 6. Commands & Events
                 vm.register_fn("groot.SpawnEntity", |args| {
                     let script = args
@@ -420,7 +544,22 @@ impl GrootScriptHost {
                     let y = args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
                     let tag = args.get(3).and_then(|v| v.as_string()).unwrap_or("").to_string();
                     if let Ok(mut reqs) = SPAWN_REQUESTS.lock() {
-                        reqs.push(SpawnRequest { script, x, y, tag });
+                        reqs.push(SpawnRequest::Script { script, x, y, tag });
+                    }
+                    Value::Nil
+                });
+
+                vm.register_fn("groot.SpawnPrefab", |args| {
+                    let name = args
+                        .first()
+                        .and_then(|v| v.as_string())
+                        .unwrap_or("")
+                        .to_string();
+                    let x = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    let y = args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    let tag = args.get(3).and_then(|v| v.as_string()).unwrap_or("").to_string();
+                    if let Ok(mut reqs) = SPAWN_REQUESTS.lock() {
+                        reqs.push(SpawnRequest::Prefab { name, x, y, tag });
                     }
                     Value::Nil
                 });
@@ -494,6 +633,8 @@ pub struct GrootPlugin;
 impl Plugin for GrootPlugin {
     fn build(&self, app: &mut App) {
         app.insert_non_send_resource(GrootScriptHost::new())
+            .init_resource::<DebugRender>()
+            .add_systems(Startup, spawn_scene_system)
             .add_systems(
                 Update,
                 (
@@ -502,7 +643,7 @@ impl Plugin for GrootPlugin {
                     script_execution_system,
                     handle_spawn_requests_system,
                     handle_script_events_system,
-                    render_debug_gizmos_system,
+                    render_collider_debug_system,
                 )
                     .chain(),
             );
@@ -603,6 +744,7 @@ type ScriptEntityQuery<'w, 's> = Query<
         Option<&'static mut Sprite>,
         &'static mut ScriptTransform,
         &'static mut ScriptColor,
+        Option<&'static mut Collider>,
     ),
 >;
 
@@ -647,7 +789,9 @@ fn script_execution_system(
     });
 
     // 2. Tick each entity's script.
-    for (entity, comp, mut transform, sprite, mut script_tf, mut script_color) in &mut script_query {
+    for (entity, comp, mut transform, sprite, mut script_tf, mut script_color, collider) in
+        &mut script_query
+    {
         CURRENT_ENTITY.with(|c| c.set(comp.entity_id));
 
         // Sync ECS -> scratch so GetSelf* reflects the live entity.
@@ -663,6 +807,10 @@ fn script_execution_system(
                 let c = sprite.color;
                 s.color = (c.r(), c.g(), c.b(), c.a());
             }
+            if let Some(collider) = &collider {
+                s.collider_w = collider.width;
+                s.collider_h = collider.height;
+            }
             s.destroy_requested = false;
         });
 
@@ -673,8 +821,8 @@ fn script_execution_system(
         }
 
         // Sync scratch -> ECS components (the source of truth), mirror the
-        // result into ScriptTransform/ScriptColor for component readers, and
-        // despawn entities that asked to die.
+        // result into ScriptTransform/ScriptColor/Collider for component
+        // readers, and despawn entities that asked to die.
         CURRENT_STATE.with(|st| {
             let s = st.borrow();
             if s.destroy_requested {
@@ -696,6 +844,10 @@ fn script_execution_system(
                 script_tf.scale_x = s.scale_x;
                 script_tf.scale_y = s.scale_y;
                 script_color.0 = Color::rgba(s.color.0, s.color.1, s.color.2, s.color.3);
+                if let Some(mut collider) = collider {
+                    collider.width = s.collider_w;
+                    collider.height = s.collider_h;
+                }
             }
         });
     }
@@ -732,46 +884,227 @@ fn script_execution_system(
     });
 }
 
-/// Process entity spawn requests queued by scripts.
+/// Placement + identity for an entity spawned from a prefab.
+struct PrefabPlacement<'a> {
+    name: &'a str,
+    x: f32,
+    y: f32,
+    z: f32,
+    entity_id: Option<u32>,
+    pipe_index: Option<usize>,
+    tag: &'a str,
+}
+
+/// Spawn the initial scene entities listed under `[[scene.entity]]` in
+/// `groot.toml`. Visuals come entirely from prefab data — no Rust required.
+fn spawn_scene_system(mut commands: Commands, config: Option<Res<GrootConfig>>) {
+    let Some(config) = config else { return };
+    bevy::log::info!(
+        "[GROOT] {} v{} — spawning {} scene entities",
+        config.project.name,
+        config.project.version,
+        config.scene.entities.len()
+    );
+    for entity_cfg in &config.scene.entities {
+        spawn_prefab_entity(
+            &mut commands,
+            &config.prefabs,
+            PrefabPlacement {
+                name: &entity_cfg.prefab,
+                x: entity_cfg.x,
+                y: entity_cfg.y,
+                z: entity_cfg
+                    .z
+                    .or_else(|| prefab_z(&config.prefabs, &entity_cfg.prefab))
+                    .unwrap_or(0.0),
+                entity_id: entity_cfg.entity_id,
+                pipe_index: entity_cfg.pipe_index,
+                tag: &entity_cfg.tag,
+            },
+        );
+    }
+}
+
+fn prefab_z(prefabs: &[PrefabConfig], name: &str) -> Option<f32> {
+    prefabs.iter().find(|p| p.name == name).and_then(|p| p.z)
+}
+
+/// Look up a prefab by name and spawn its visual (and optional behavior) as an
+/// ECS entity. Returns `false` if the prefab name is unknown.
+fn spawn_prefab_entity(
+    commands: &mut Commands,
+    prefabs: &[PrefabConfig],
+    p: PrefabPlacement<'_>,
+) -> bool {
+    let PrefabPlacement {
+        name,
+        x,
+        y,
+        z,
+        entity_id,
+        pipe_index,
+        tag,
+    } = p;
+    let Some(prefab) = prefabs.iter().find(|pr| pr.name == name) else {
+        bevy::log::warn!("[GROOT SPAWN] unknown prefab '{name}'");
+        return false;
+    };
+
+    match prefab.kind.as_deref() {
+        Some("pipe") => {
+            let Some(idx) = pipe_index else {
+                bevy::log::warn!("[GROOT SPAWN] prefab '{name}' (pipe) needs a pipe_index");
+                return false;
+            };
+            let sprite_cfg = prefab.sprite.as_ref();
+            let size = sprite_cfg.map(|s| s.size).unwrap_or([52.0, 400.0]);
+            let color = sprite_cfg.map(|s| s.color).unwrap_or(default_color());
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: rgba(color),
+                        custom_size: Some(Vec2::new(size[0], size[1])),
+                        ..default()
+                    },
+                    transform: Transform::from_xyz(x, y, z),
+                    ..default()
+                },
+                PipeIndex(idx),
+            ));
+            true
+        }
+        Some("score") => {
+            let text_cfg = prefab.text.as_ref();
+            commands.spawn((
+                Text2dBundle {
+                    text: Text::from_section(
+                        text_cfg.map(|t| t.value.as_str()).unwrap_or(""),
+                        TextStyle {
+                            font_size: text_cfg.map(|t| t.size).unwrap_or(default_font_size()),
+                            color: rgba(text_cfg.map(|t| t.color).unwrap_or(default_color())),
+                            ..default()
+                        },
+                    )
+                    .with_justify(JustifyText::Center),
+                    transform: Transform::from_xyz(
+                        x,
+                        y,
+                        text_cfg.map(|t| t.z).unwrap_or(0.0),
+                    ),
+                    ..default()
+                },
+                ScoreText,
+            ));
+            true
+        }
+        _ => {
+            let id = entity_id.unwrap_or_else(rand_entity_id);
+            let sprite_cfg = prefab.sprite.as_ref();
+            let size = sprite_cfg.map(|s| s.size).unwrap_or(default_sprite_size());
+            let color = sprite_cfg.map(|s| s.color).unwrap_or(default_color());
+            let collider_size = prefab.size.unwrap_or([0.0, 0.0]);
+
+            let mut bundle = commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: rgba(color),
+                        custom_size: Some(Vec2::new(size[0], size[1])),
+                        ..default()
+                    },
+                    transform: Transform::from_xyz(x, y, z),
+                    ..default()
+                },
+                ScriptTransform {
+                    x,
+                    y,
+                    ..default()
+                },
+                ScriptColor(rgba(color)),
+                Collider {
+                    width: collider_size[0],
+                    height: collider_size[1],
+                },
+            ));
+
+            if let Some(script) = &prefab.script {
+                bundle.insert(GoScriptComponent {
+                    script_path: script.clone(),
+                    entity_id: id,
+                    tag: tag.to_string(),
+                });
+            }
+            true
+        }
+    }
+}
+
+fn rgba([r, g, b, a]: [f32; 4]) -> Color {
+    Color::rgba(r, g, b, a)
+}
+
+/// Process entity spawn requests queued by scripts (`groot.SpawnEntity` /
+/// `groot.SpawnPrefab`).
 fn handle_spawn_requests_system(
     mut commands: Commands,
     mut host: NonSendMut<GrootScriptHost>,
+    config: Option<Res<GrootConfig>>,
 ) {
     let mut reqs = match SPAWN_REQUESTS.lock() {
         Ok(reqs) => reqs,
         Err(_) => return,
     };
     for req in reqs.drain(..) {
-        bevy::log::info!(
-            "[GROOT ECS] Spawning '{}' at ({}, {})",
-            req.script,
-            req.x,
-            req.y
-        );
-        // Ensure the engine is loaded for the new script.
-        host.ensure_engine(&req.script);
-        commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::WHITE,
-                    custom_size: Some(Vec2::new(32.0, 32.0)),
-                    ..default()
-                },
-                transform: Transform::from_xyz(req.x, req.y, 1.0),
-                ..default()
-            },
-            GoScriptComponent {
-                script_path: req.script,
-                entity_id: rand_entity_id(),
-                tag: req.tag,
-            },
-            ScriptTransform {
-                x: req.x,
-                y: req.y,
-                ..default()
-            },
-            ScriptColor::default(),
-        ));
+        match req {
+            SpawnRequest::Prefab { name, x, y, tag } => {
+                let prefabs = config.as_ref().map(|c| c.prefabs.clone()).unwrap_or_default();
+                let z = prefab_z(&prefabs, &name).unwrap_or(1.0);
+                if let Some(script) = prefabs.iter().find(|p| p.name == name).and_then(|p| p.script.clone())
+                {
+                    host.ensure_engine(&script);
+                }
+                spawn_prefab_entity(
+                    &mut commands,
+                    &prefabs,
+                    PrefabPlacement {
+                        name: &name,
+                        x,
+                        y,
+                        z,
+                        entity_id: None,
+                        pipe_index: None,
+                        tag: &tag,
+                    },
+                );
+            }
+            SpawnRequest::Script { script, x, y, tag } => {
+                bevy::log::info!("[GROOT ECS] Spawning '{script}' at ({x}, {y})");
+                // Ensure the engine is loaded for the new script.
+                host.ensure_engine(&script);
+                commands.spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color: Color::WHITE,
+                            custom_size: Some(Vec2::new(32.0, 32.0)),
+                            ..default()
+                        },
+                        transform: Transform::from_xyz(x, y, 1.0),
+                        ..default()
+                    },
+                    GoScriptComponent {
+                        script_path: script,
+                        entity_id: rand_entity_id(),
+                        tag,
+                    },
+                    ScriptTransform {
+                        x,
+                        y,
+                        ..default()
+                    },
+                    ScriptColor::default(),
+                    Collider::default(),
+                ));
+            }
+        }
     }
 }
 
@@ -786,23 +1119,27 @@ fn handle_script_events_system() {
     }
 }
 
-/// Render debug gizmo commands accumulated during the frame.
-fn render_debug_gizmos_system(mut gizmos: Gizmos) {
-    let mut cmds = match GIZMO_COMMANDS.lock() {
-        Ok(cmds) => cmds,
-        Err(_) => return,
-    };
-    for cmd in cmds.drain(..) {
-        match cmd {
-            GizmoCommand::Line(start, end, color) => {
-                gizmos.line_2d(start, end, color);
-            }
-            GizmoCommand::Circle(center, radius, color) => {
-                gizmos.circle_2d(center, radius, color);
-            }
-            GizmoCommand::Rect(center, size, color) => {
-                gizmos.rect_2d(center, 0.0, size, color);
-            }
+/// Host-side debug overlay: draws a wireframe box around every entity that
+/// declared collider *data*. Scripts never draw; they only set `Collider` and
+/// the engine decides how (or whether) to visualize it.
+fn render_collider_debug_system(
+    mut gizmos: Gizmos,
+    debug: Res<DebugRender>,
+    query: Query<(&Transform, &Collider)>,
+) {
+    if !debug.show_colliders {
+        return;
+    }
+    let color = Color::rgba(0.3, 1.0, 0.4, 1.0);
+    for (transform, collider) in &query {
+        if collider.width > 0.0 && collider.height > 0.0 {
+            let (_, _, rot) = transform.rotation.to_euler(EulerRot::XYZ);
+            gizmos.rect_2d(
+                transform.translation.truncate(),
+                rot,
+                Vec2::new(collider.width, collider.height),
+                color,
+            );
         }
     }
 }

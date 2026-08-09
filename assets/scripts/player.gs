@@ -1,6 +1,9 @@
 // player.gs — Hybrid Component-Behavior Player Script
 // Demonstrates: struct state, receiver methods, self-context, entity queries,
-// event emitting, collision detection, and debug gizmo drawing.
+// event emitting, collision data, and pure-math collision checks.
+//
+// Note: the script declares *data* (position, color, collider) and runs pure
+// math; the host engine owns all rendering.
 
 type Player struct {
     Speed float64
@@ -25,19 +28,14 @@ func OnUpdate(dt float64) {
     var newY = groot.Clamp(py + inputY * player.Speed * dt, -320.0, 320.0)
     groot.SetSelfPosition(newX, newY)
 
-    // 2. Mouse Ray Visualization
-    var mousePos = groot.GetMousePosition()
-    var mx = mousePos[0]
-    var my = mousePos[1]
-    if groot.IsMouseButtonDown(0) {
-        groot.DrawDebugLine(newX, newY, mx, my, 0.0, 0.9, 1.0)
-    }
+    // 2. Hitbox data — the engine visualizes/handles it; we never draw.
+    groot.SetSelfCollider(60.0, 60.0)
 
-    // 3. Collision Check against Enemy (ID #2)
+    // 3. Collision Check against Enemy (ID #2) via pure math
     var enemyPos = groot.GetEntityPosition(2)
     var epx = enemyPos[0]
     var epy = enemyPos[1]
-    var isHit = groot.CheckCollisionRecs(
+    var isHit = groot.RectsOverlap(
         newX - 30.0, newY - 30.0, 60.0, 60.0,
         epx - 30.0, epy - 30.0, 60.0, 60.0,
     )
@@ -48,20 +46,17 @@ func OnUpdate(dt float64) {
         groot.SetSelfColor(0.1, 0.8, 0.3, 1.0)
     }
 
-    // 4. Debug Circle
-    groot.DrawDebugCircle(newX, newY, 35.0, 0.2, 1.0, 0.5)
-
-    // 5. Distance Query
+    // 4. Distance Query
     var dist = groot.GetDistance(selfId, 2)
     if dist < 120.0 {
         groot.Warn("Enemy nearby! Distance: " + fmt.Sprintf("%.1f", dist))
     }
 
-    // 6. Actions
+    // 5. Actions
     if groot.IsKeyPressed("Space") {
         groot.Log("Spacebar pressed!")
         groot.PlaySound("assets/sounds/jump.wav")
-        groot.SpawnEntity("effects/jump.gs", newX, newY - 30.0)
+        groot.SpawnEntity("assets/scripts/effects/jump.gs", newX, newY - 30.0, "effect")
     }
 
     groot.Log(fmt.Sprintf("pos=(%.1f,%.1f) hp=%d dist=%.1f",

@@ -1,10 +1,11 @@
 use goscript::value::Value;
 use goscript::vm::VirtualMachine;
 
-/// Stateless Raylib-style utility bindings for the Groot engine.
+/// Stateless utility bindings for the Groot engine.
 ///
-/// These are pure math/collision/logging functions with no entity state.
-/// They are registered once on every VM via [`GrootModuleExt::register_groot_module`].
+/// These are pure math/collision/logging functions with no entity state and no
+/// rendering. They are registered once on every VM via
+/// [`GrootModuleExt::register_groot_module`].
 pub trait GrootModuleExt {
     fn register_groot_module(&mut self);
 }
@@ -64,8 +65,8 @@ impl GrootModuleExt for VirtualMachine {
             Value::Float(0.0)
         });
 
-        // --- Collision ---------------------------------------------------------
-        self.register_fn("groot.CheckCollisionRecs", |args| {
+        // --- Collision (pure math, no entity state) ----------------------------
+        self.register_fn("groot.RectsOverlap", |args| {
             if args.len() >= 8 {
                 let x1 = args[0].as_number().unwrap_or(0.0);
                 let y1 = args[1].as_number().unwrap_or(0.0);
@@ -82,7 +83,7 @@ impl GrootModuleExt for VirtualMachine {
             Value::Bool(false)
         });
 
-        self.register_fn("groot.CheckCollisionCircles", |args| {
+        self.register_fn("groot.CirclesOverlap", |args| {
             if args.len() >= 6 {
                 let x1 = args[0].as_number().unwrap_or(0.0);
                 let y1 = args[1].as_number().unwrap_or(0.0);
@@ -99,7 +100,7 @@ impl GrootModuleExt for VirtualMachine {
             Value::Bool(false)
         });
 
-        self.register_fn("groot.CheckCollisionCircleRec", |args| {
+        self.register_fn("groot.CircleHitsRect", |args| {
             if args.len() >= 7 {
                 let cx = args[0].as_number().unwrap_or(0.0);
                 let cy = args[1].as_number().unwrap_or(0.0);

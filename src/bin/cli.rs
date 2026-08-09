@@ -97,6 +97,25 @@ version = "0.1.0"
 title = "{name}"
 width = 800
 height = 600
+
+# --- Prefabs: visuals are data, scripts only add behavior ---
+[[prefab]]
+name = "player"
+script = "assets/scripts/player.gs"
+size = [32.0, 32.0]
+z = 10.0
+
+  [prefab.sprite]
+  size = [32.0, 32.0]
+  color = [0.1, 0.8, 0.3, 1.0]
+
+# --- Scene ---
+[[scene.entity]]
+prefab = "player"
+x = 0.0
+y = 0.0
+entity_id = 1
+tag = "Player"
 "#
         ),
     );
@@ -110,6 +129,9 @@ func OnUpdate(dt float64) {
     var pos = groot.GetSelfPosition()
     var move = groot.GetAxis("Horizontal")
     groot.SetSelfPosition(pos[0] + move*self.Speed*dt, pos[1])
+
+    // Declare hitbox data; the host engine renders/handles it.
+    groot.SetSelfCollider(32.0, 32.0)
     groot.Log("Hello from Groot GoScript!")
 }
 "#
@@ -119,7 +141,7 @@ func OnUpdate(dt float64) {
     write_or_die(
         project_path.join("README.md"),
         format!(
-            "# {name}\n\nA Groot game project. Scripts live in `assets/scripts/`, sprites in `assets/sprites/`.\n\n- `groot-cli run` to run\n- `groot-cli build` to build a release bundle\n"
+            "# {name}\n\nA Groot game project. Scripts live in `assets/scripts/`, sprites in `assets/sprites/`.\nVisuals are defined as prefab data in `groot.toml`; scripts only add behavior.\n\n- `groot-cli run` to run\n- `groot-cli build` to build a release bundle\n"
         ),
     );
 

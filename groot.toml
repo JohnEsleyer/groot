@@ -1,0 +1,112 @@
+# Groot project config — graphics are data, not Rust.
+#
+# Prefabs map a name to a visual (sprite or text) plus an optional behavior
+# script. The scene lists the initial entities. Scripts only add behavior
+# (position, velocity, state, events); the engine renders from this data.
+
+[project]
+name = "Groot Flappy Bird"
+version = "0.1.0"
+
+[window]
+title = "Groot Flappy Bird (GoScript + Bevy ECS)"
+width = 800
+height = 600
+
+# --- Prefabs ----------------------------------------------------------------
+
+[[prefab]]
+name = "bird"
+script = "assets/scripts/flappy.gs"
+size = [32.0, 32.0]
+z = 10.0
+
+  [prefab.sprite]
+  size = [32.0, 32.0]
+  color = [0.95, 0.8, 0.2, 1.0]
+
+[[prefab]]
+name = "ground"
+z = 5.0
+
+  [prefab.sprite]
+  size = [800.0, 100.0]
+  color = [0.2, 0.7, 0.3, 1.0]
+
+# kind = "pipe" spawns a sprite tagged with PipeIndex so scripts can write
+# its position as data via groot.SetPipePosition.
+[[prefab]]
+name = "pipe"
+kind = "pipe"
+z = 2.0
+
+  [prefab.sprite]
+  size = [52.0, 400.0]
+  color = [0.1, 0.8, 0.3, 1.0]
+
+# kind = "score" spawns the HUD text updated by groot.SetScoreDisplay.
+[[prefab]]
+name = "score"
+kind = "score"
+
+  [prefab.text]
+  value = "Score: 0  Best: 0"
+  size = 28.0
+  color = [1.0, 1.0, 1.0, 1.0]
+  z = 20.0
+
+# --- Scene ------------------------------------------------------------------
+
+[[scene.entity]]
+prefab = "bird"
+x = -50.0
+y = 0.0
+entity_id = 1
+tag = "Bird"
+
+[[scene.entity]]
+prefab = "ground"
+x = 0.0
+y = -260.0
+
+[[scene.entity]]
+prefab = "score"
+x = 0.0
+y = 260.0
+
+# Three pipe pairs (6 segments): even index = top pipe, odd = bottom.
+[[scene.entity]]
+prefab = "pipe"
+x = 1000.0
+y = 0.0
+pipe_index = 0
+
+[[scene.entity]]
+prefab = "pipe"
+x = 1000.0
+y = 0.0
+pipe_index = 1
+
+[[scene.entity]]
+prefab = "pipe"
+x = 1000.0
+y = 0.0
+pipe_index = 2
+
+[[scene.entity]]
+prefab = "pipe"
+x = 1000.0
+y = 0.0
+pipe_index = 3
+
+[[scene.entity]]
+prefab = "pipe"
+x = 1000.0
+y = 0.0
+pipe_index = 4
+
+[[scene.entity]]
+prefab = "pipe"
+x = 1000.0
+y = 0.0
+pipe_index = 5

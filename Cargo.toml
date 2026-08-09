@@ -14,6 +14,8 @@ path = "src/bin/cli.rs"
 
 [dependencies]
 bevy = "0.13"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
 
 # GoScript scripting crate, fetched from the upstream GitHub repository.
 # Local development of goscript happens in a sibling checkout and is pushed
