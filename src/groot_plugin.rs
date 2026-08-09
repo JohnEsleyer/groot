@@ -21,6 +21,14 @@ pub struct GoScriptComponent {
     pub tag: String,
 }
 
+/// Marker for the Flappy Bird entity (position set by `groot.SetPosition`).
+#[derive(Component)]
+pub struct Bird;
+
+/// Identifies a pipe segment by index (position set by `groot.SetPipePosition`).
+#[derive(Component)]
+pub struct PipeIndex(pub usize);
+
 /// Debug drawing command queued by `groot.DrawDebug*` calls.
 pub enum GizmoCommand {
     Line(Vec2, Vec2, Color),
@@ -72,6 +80,10 @@ static ENTITY_STATES: LazyLock<Mutex<HashMap<u32, EntityState>>> =
 static GIZMO_COMMANDS: Mutex<Vec<GizmoCommand>> = Mutex::new(Vec::new());
 static SPAWN_REQUESTS: Mutex<Vec<SpawnRequest>> = Mutex::new(Vec::new());
 static SCRIPT_EVENTS: Mutex<Vec<ScriptEvent>> = Mutex::new(Vec::new());
+
+// Flappy Bird: bird and pipe positions synced from GoScript to Bevy transforms
+static BIRD_POSITION: Mutex<(f32, f32)> = Mutex::new((-50.0, 0.0));
+static PIPE_POSITIONS: Mutex<Vec<(f32, f32, f32)>> = Mutex::new(Vec::new());
 
 // ---------------------------------------------------------------------------
 // Shared input state
@@ -375,6 +387,34 @@ impl GrootScriptHost {
                     Value::Nil
                 });
 
+                // Flappy Bird: direct bird position binding (bypasses entity state)
+                vm.register_fn("groot.SetPosition", |args| {
+                    let x = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    let y = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    if let Ok(mut pos) = BIRD_POSITION.lock() {
+                        *pos = (x, y);
+                    }
+                    Value::Nil
+                });
+
+                // Flappy Bird: pipe position sync binding
+                vm.register_fn("groot.SetPipePosition", |args| {
+                    let idx = args.first().and_then(|v| match v {
+                        Value::Int(i) => Some(*i as usize),
+                        _ => None,
+                    }).unwrap_or(0);
+                    let x = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    let gap_y = args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    let gap_size = args.get(3).and_then(|v| v.as_number()).unwrap_or(130.0) as f32;
+                    if let Ok(mut pipes) = PIPE_POSITIONS.lock() {
+                        if idx >= pipes.len() {
+                            pipes.resize(idx + 1, (0.0, 0.0, 130.0));
+                        }
+                        pipes[idx] = (x, gap_y, gap_size);
+                    }
+                    Value::Nil
+                });
+
                 engine
             })
     }
@@ -411,6 +451,7 @@ impl Plugin for GrootPlugin {
                     script_hot_reload_system,
                     script_update_system,
                     apply_script_changes_system,
+                    sync_bird_and_pipes_system,
                     render_debug_gizmos_system,
                     handle_spawn_requests_system,
                     handle_script_events_system,
@@ -555,6 +596,46 @@ fn apply_script_changes_system(
             if let Some(mut sprite) = sprite {
                 sprite.color =
                     Color::rgba(state.color.0, state.color.1, state.color.2, state.color.3);
+            }
+        }
+    }
+}
+
+/// Sync bird position and pipe positions from GoScript statics to Bevy transforms.
+fn sync_bird_and_pipes_system(
+    mut bird_query: Query<&mut Transform, (With<Bird>, Without<PipeIndex>)>,
+    mut pipe_query: Query<(&mut Transform, &PipeIndex), Without<Bird>>,
+) {
+    if let Ok(pos) = BIRD_POSITION.lock() {
+        for mut transform in &mut bird_query {
+            transform.translation.x = pos.0;
+            transform.translation.y = pos.1;
+        }
+    }
+
+    if let Ok(pipes) = PIPE_POSITIONS.lock() {
+        for (mut transform, pipe_idx) in &mut pipe_query {
+            if let Some(&(x, gap_y, gap_size)) = pipes.get(pipe_idx.0) {
+                transform.translation.x = x;
+                // Top pipe: sits above the gap
+                // Bottom pipe: sits below the gap
+                // The sprite custom_size height is 400, gap center is at gap_y
+                // Top pipe center = gap_y + gap_size/2 + 200 (half the sprite height)
+                // Bottom pipe center = gap_y - gap_size/2 - 200
+                // But this depends on sprite setup. We'll use the simpler offset approach:
+                // The gap spans [gap_y - gap_size/2, gap_y + gap_size/2]
+                // Top pipe visual: from gap top to screen top
+                // Bottom pipe visual: from gap bottom to screen bottom
+                // Since sprites are centered, we position them so their inner edge aligns with the gap
+                let half_gap = gap_size / 2.0;
+                let sprite_height = 400.0;
+                if pipe_idx.0 % 2 == 0 {
+                    // Even index = top pipe
+                    transform.translation.y = gap_y + half_gap + sprite_height / 2.0;
+                } else {
+                    // Odd index = bottom pipe
+                    transform.translation.y = gap_y - half_gap - sprite_height / 2.0;
+                }
             }
         }
     }
