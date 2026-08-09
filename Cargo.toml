@@ -3,14 +3,22 @@ name = "groot"
 version = "0.1.0"
 edition = "2021"
 description = "Groot: a fast-iteration game engine pairing Bevy with the GoScript embedded scripting VM"
+# With two binaries this crate keeps plain `cargo run` launching the game demo.
+default-run = "groot-demo"
 
-# The `groot-cli` binary scaffolds, runs, and builds Groot projects:
-#   cargo run --bin groot-cli -- new my-game
-#   cargo run --bin groot-cli -- run
-#   cargo run --bin groot-cli -- build
+# The `groot` CLI scaffolds, runs, and builds Groot projects:
+#   groot new my-game
+#   groot run
+#   groot build
+#   groot info
 [[bin]]
-name = "groot-cli"
+name = "groot"
 path = "src/bin/cli.rs"
+
+# The game runtime demo: loads groot.toml and runs the scene.
+[[bin]]
+name = "groot-demo"
+path = "src/main.rs"
 
 [dependencies]
 bevy = "0.13"

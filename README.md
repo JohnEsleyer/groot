@@ -27,7 +27,7 @@ assets/scripts/*.gs  ──►  GoScript VM (HotReloadEngine)  ──►  entity
   the script host (`GrootScriptHost`), prefab/scene spawning, input sync,
   per-frame script execution, and cross-boundary queues for spawns/events.
 - `src/groot_module.rs` — stateless `groot.*` utilities (math, collision, log).
-- `src/bin/cli.rs` — the `groot-cli` command-line tool.
+- `src/bin/cli.rs` — the `groot` CLI tool (`groot new` / `run` / `build`).
 
 Script state is **ECS-first**: `script_execution_system` copies each script
 entity's `Transform`/`Sprite`/`Collider` into a thread-local scratch, runs
@@ -40,16 +40,23 @@ from `Collider` data by the engine when `DebugRender.show_colliders` is on.
 
 ```bash
 # Scaffold a new project folder (groot.toml + prefab + assets/scripts/player.gs)
-cargo run --bin groot-cli -- new my-game
+cargo run --bin groot -- new my-game
 
 # Run the current Groot game
-cargo run --bin groot-cli -- run
+cargo run --bin groot -- run
 
 # Build a release bundle
-cargo run --bin groot-cli -- build
+cargo run --bin groot -- build
 
 # Engine info / help
-cargo run --bin groot-cli -- info
+cargo run --bin groot -- info
+```
+
+Or install the CLI globally and call it directly:
+
+```bash
+cargo install --path . --bin groot
+groot new my-game
 ```
 
 ## Run the demo

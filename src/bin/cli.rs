@@ -3,10 +3,10 @@
 //
 // Scaffolds, runs, and builds Groot projects.
 //
-//   groot-cli new <name>   Scaffold a new Groot project folder
-//   groot-cli run          Run the current Groot game (cargo run)
-//   groot-cli build        Build the release bundle (cargo build --release)
-//   groot-cli info         Print engine version / paths
+//   groot new <name>   Scaffold a new Groot project folder
+//   groot run          Run the current Groot game (cargo run)
+//   groot build        Build the release bundle (cargo build --release)
+//   groot info         Print engine version / paths
 // ============================================================================
 
 use std::fs;
@@ -19,7 +19,7 @@ fn print_help() {
     println!("==================================================");
     println!("            GROOT GAME ENGINE CLI                 ");
     println!("==================================================");
-    println!("Usage: groot-cli <command> [args]");
+    println!("Usage: groot <command> [args]");
     println!();
     println!("Commands:");
     println!("  new <name>   - Scaffold a new Groot project");
@@ -44,7 +44,7 @@ fn main() {
         "info" => cmd_info(),
         "help" | "--help" | "-h" => print_help(),
         "version" | "--version" | "-V" => {
-            println!("groot-cli {VERSION}");
+            println!("groot {VERSION}");
         }
         other => {
             eprintln!("Error: unknown command '{other}'");
@@ -55,12 +55,12 @@ fn main() {
 }
 
 // ---------------------------------------------------------------------------
-// groot-cli new
+// groot new
 // ---------------------------------------------------------------------------
 
 fn cmd_new(args: &[String]) {
     let Some(name) = args.first() else {
-        eprintln!("Error: missing project name. Usage: groot-cli new <name>");
+        eprintln!("Error: missing project name. Usage: groot new <name>");
         std::process::exit(1);
     };
     if !is_valid_project_name(name) {
@@ -141,7 +141,7 @@ func OnUpdate(dt float64) {
     write_or_die(
         project_path.join("README.md"),
         format!(
-            "# {name}\n\nA Groot game project. Scripts live in `assets/scripts/`, sprites in `assets/sprites/`.\nVisuals are defined as prefab data in `groot.toml`; scripts only add behavior.\n\n- `groot-cli run` to run\n- `groot-cli build` to build a release bundle\n"
+            "# {name}\n\nA Groot game project. Scripts live in `assets/scripts/`, sprites in `assets/sprites/`.\nVisuals are defined as prefab data in `groot.toml`; scripts only add behavior.\n\n- `groot run` to run\n- `groot build` to build a release bundle\n"
         ),
     );
 
@@ -151,11 +151,11 @@ func OnUpdate(dt float64) {
     println!("  {}/groot.toml", project_path.display());
     println!("  {}/assets/scripts/player.gs", project_path.display());
     println!();
-    println!("Next: run `groot-cli run` from the engine workspace to play.");
+    println!("Next: run `groot run` from the engine workspace to play.");
 }
 
 // ---------------------------------------------------------------------------
-// groot-cli run / build / info
+// groot run / build / info
 // ---------------------------------------------------------------------------
 
 fn cmd_run(dir: Option<&str>) {
@@ -193,7 +193,7 @@ fn cmd_info() {
     println!("==================================================");
     println!("  GROOT ENGINE INFO");
     println!("==================================================");
-    println!("  groot-cli version : {VERSION}");
+    println!("  groot version : {VERSION}");
     println!("  cargo package     : groot");
     println!("  cwd               : {}", std::env::current_dir().unwrap_or_default().display());
     println!("  scripts dir       : assets/scripts");

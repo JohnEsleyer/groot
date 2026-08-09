@@ -26,7 +26,7 @@ the host engine owns *representation and rendering*.
 | `src/main.rs` | Loads `groot.toml`, builds the window, inserts `GrootConfig`, adds the plugin |
 | `src/groot_plugin.rs` | Core Bevy plugin: components, host functions, ECS systems, prefab/scene spawning |
 | `src/groot_module.rs` | Stateless `GrootModuleExt` trait (math, collision, logging) — pure functions, no state, no rendering |
-| `src/bin/cli.rs` | `groot-cli` — scaffolds/runs/builds projects |
+| `src/bin/cli.rs` | `groot` CLI — scaffolds/runs/builds projects |
 
 ---
 
