@@ -10,7 +10,7 @@ bevy = "0.13"
 # GoScript scripting crate. Uses a local path while `goscript` is unreleased.
 # Switch to the published/git dependency once it exists:
 # goscript = { git = "https://github.com/JohnEsleyer/goscript" }
-goscript = { path = "../../015-goscript/goscript" }
+goscript = { path = "../../012-goscript/goscript" }
 
 [profile.dev]
 opt-level = 1
