@@ -1,3 +1,5 @@
+use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::Mutex;
 
 use bevy::prelude::*;
@@ -17,6 +19,18 @@ pub struct GoScriptComponent {
 pub struct GrootScriptHost {
     engine: HotReloadEngine,
     script_path: String,
+    /// Shared input state — closures capture a clone of this `Rc` and read
+    /// the values written by `push_input_and_tick`. No per-frame allocation.
+    input: Rc<InputState>,
+}
+
+/// Shared input state bridging Bevy's keyboard system and the script VM.
+/// Written by `push_input_and_tick` (every frame), read by `groot.GetAxis`
+/// and `groot.IsKeyDown` closures (called from scripts).
+struct InputState {
+    move_x: Cell<f64>,
+    move_y: Cell<f64>,
+    space: Cell<bool>,
 }
 
 /// Shared player translation written by the `groot.SetPosition` binding and
@@ -51,9 +65,41 @@ impl GrootScriptHost {
             Value::Nil
         });
 
+        // --- Input bindings: registered ONCE, not every frame ----------------
+        // Shared input state. Closures capture `Rc<InputState>` by clone (no
+        // per-frame heap allocation or process-wide mutex lock).
+        let input = Rc::new(InputState {
+            move_x: Cell::new(0.0),
+            move_y: Cell::new(0.0),
+            space: Cell::new(false),
+        });
+
+        let input_axis = Rc::clone(&input);
+        vm.register_fn("groot.GetAxis", move |args| {
+            if let Some(Value::String(axis)) = args.first() {
+                match axis.as_str() {
+                    "Horizontal" => return Value::Float(input_axis.move_x.get()),
+                    "Vertical" => return Value::Float(input_axis.move_y.get()),
+                    _ => {}
+                }
+            }
+            Value::Float(0.0)
+        });
+
+        let input_key = Rc::clone(&input);
+        vm.register_fn("groot.IsKeyDown", move |args| {
+            if let Some(Value::String(key)) = args.first() {
+                if key == "Space" {
+                    return Value::Bool(input_key.space.get());
+                }
+            }
+            Value::Bool(false)
+        });
+
         Self {
             engine,
             script_path: script_path.to_string(),
+            input,
         }
     }
 
@@ -68,31 +114,13 @@ impl GrootScriptHost {
     /// Push the current frame's input state into the VM, then run the script's
     /// `OnUpdate(dt)` function through the live VM.
     pub fn push_input_and_tick(&mut self, move_x: f64, move_y: f64, space: bool, dt: f64) {
-        let vm = &mut self.engine.vm;
+        // Update shared input state — no re-registration, no allocation.
+        self.input.move_x.set(move_x);
+        self.input.move_y.set(move_y);
+        self.input.space.set(space);
 
-        vm.register_fn("groot.GetAxis", move |args| {
-            if let Some(Value::String(axis)) = args.first() {
-                if axis == "Horizontal" {
-                    return Value::Float(move_x);
-                }
-                if axis == "Vertical" {
-                    return Value::Float(move_y);
-                }
-            }
-            Value::Float(0.0)
-        });
-
-        vm.register_fn("groot.IsKeyDown", move |args| {
-            if let Some(Value::String(key)) = args.first() {
-                if key == "Space" {
-                    return Value::Bool(space);
-                }
-            }
-            Value::Bool(false)
-        });
-
-        vm.set_delta_time(dt);
-        if let Err(e) = vm.call("OnUpdate", vec![Value::Float(dt)]) {
+        self.engine.vm.set_delta_time(dt);
+        if let Err(e) = self.engine.vm.call("OnUpdate", vec![Value::Float(dt)]) {
             error!("[GROOT SCRIPT]: OnUpdate failed: {e}");
         }
     }
