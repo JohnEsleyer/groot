@@ -1,4 +1,4 @@
-// enemy.gs — Hybrid Component-Behavior Enemy Script
+// enemy.go — Hybrid Component-Behavior Enemy Script
 // Demonstrates: struct state, receiver methods, self-context, distance queries,
 // collider data, event emitting. All rendering is handled by the host engine.
 

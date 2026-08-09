@@ -9,7 +9,7 @@ Technical notes, gotchas, and conventions for LLMs working on the Groot Bevy eng
 Groot is a **data-driven hybrid game engine**: scripts own *behavior and data*,
 the host engine owns *representation and rendering*.
 
-- **Data/Behavior** — GoScript (`.gs`) files manipulate entity data: position,
+- **Data/Behavior** — GoScript (`.go`) files manipulate entity data: position,
   velocity, color, scale, collider, state, spawns, and events.
 - **Presentation** — Bevy ECS + sprites/UI. Visuals are declared as *data* in
   `groot.toml` prefabs and spawned by the engine. Scripts never issue draw
@@ -234,7 +234,7 @@ var sum = pos[0] + pos[1]  // safe (regression-tested)
 
 ## 8. Hot-Reload Workflow
 
-1. Edit any `.gs` file in `assets/scripts/`.
+1. Edit any `.go` file in `assets/scripts/`.
 2. Save. `script_hot_reload_system` detects the change.
 3. The engine recompiles with `HotReloadEngine::reload_if_changed()`.
 4. Live global values (e.g. `var self = Player{...}`) are preserved.
@@ -256,7 +256,7 @@ var sum = pos[0] + pos[1]  // safe (regression-tested)
    (`SPAWN_REQUESTS`, `SCRIPT_EVENTS`).
 5. **New visual?** Define a prefab in `groot.toml`; don't hardcode in Rust.
 6. **Run `cargo build`** — zero warnings required before commit.
-7. **Test** with a `.gs` script call and verify runtime behavior.
+7. **Test** with a `.go` script call and verify runtime behavior.
 
 ---
 

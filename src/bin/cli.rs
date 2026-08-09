@@ -101,7 +101,7 @@ height = 600
 # --- Prefabs: visuals are data, scripts only add behavior ---
 [[prefab]]
 name = "player"
-script = "assets/scripts/player.gs"
+script = "assets/scripts/player.go"
 size = [32.0, 32.0]
 z = 10.0
 
@@ -121,7 +121,7 @@ tag = "Player"
     );
 
     write_or_die(
-        project_path.join("assets/scripts/player.gs"),
+        project_path.join("assets/scripts/player.go"),
         r#"type Player struct { Speed float64 }
 var self = Player{Speed: 300.0}
 
@@ -149,7 +149,7 @@ func OnUpdate(dt float64) {
     println!("Project '{name}' created successfully!");
     println!();
     println!("  {}/groot.toml", project_path.display());
-    println!("  {}/assets/scripts/player.gs", project_path.display());
+    println!("  {}/assets/scripts/player.go", project_path.display());
     println!();
     println!("Next: run `groot run` from the engine workspace to play.");
 }

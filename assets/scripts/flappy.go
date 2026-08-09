@@ -170,3 +170,7 @@ func GameOver() {
     gameState = 2
     groot.Warn(fmt.Sprintf("GAME OVER! Score: %d", score))
 }
+
+func GetScore() int {
+    return score
+}

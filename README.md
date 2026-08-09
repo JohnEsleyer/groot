@@ -2,7 +2,7 @@
 
 Groot is a fast-iteration 2D game engine pairing **Bevy** (Rust ECS + rendering)
 with **GoScript** — an embeddable Go-syntax scripting VM written in pure Rust.
-Game logic lives in `.gs` files under `assets/scripts/` and hot-reloads on save;
+Game logic lives in `.go` files under `assets/scripts/` and hot-reloads on save;
 the host engine is fully ECS-driven, so script state routes through Bevy
 components rather than global mutable maps.
 
@@ -14,7 +14,7 @@ representation and rendering. Visuals are declared as prefab data in
 
 ```
 groot.toml (prefabs + scene)  ──►  Bevy ECS (sprites/UI from prefab DATA)
-assets/scripts/*.gs  ──►  GoScript VM (HotReloadEngine)  ──►  entity DATA
+assets/scripts/*.go  ──►  GoScript VM (HotReloadEngine)  ──►  entity DATA
                                      ▲                                  │
                                      └── groot.* host bindings ──────────┘
 ```
@@ -39,7 +39,7 @@ from `Collider` data by the engine when `DebugRender.show_colliders` is on.
 ## CLI
 
 ```bash
-# Scaffold a new project folder (groot.toml + prefab + assets/scripts/player.gs)
+# Scaffold a new project folder (groot.toml + prefab + assets/scripts/player.go)
 cargo run --bin groot -- new my-game
 
 # Run the current Groot game
@@ -66,7 +66,7 @@ cargo run
 ```
 
 A Flappy Bird demo starts immediately. Its window, bird sprite, ground, pipes,
-and score HUD are **data** in `groot.toml`; `flappy.gs` only provides
+and score HUD are **data** in `groot.toml`; `flappy.go` only provides
 behavior. Scripts in `assets/scripts/` hot-reload when you save them;
 live global values are preserved across reloads.
 

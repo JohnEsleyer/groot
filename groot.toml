@@ -17,7 +17,7 @@ height = 600
 
 [[prefab]]
 name = "bird"
-script = "assets/scripts/flappy.gs"
+script = "assets/scripts/flappy.go"
 size = [32.0, 32.0]
 z = 10.0
 
