@@ -33,7 +33,7 @@ fn setup_game(mut commands: Commands) {
             ..default()
         },
         GoScriptComponent {
-            script_path: "assets/scripts/player.go".into(),
+            script_path: "assets/scripts/player.gs".into(),
         },
     ));
 }

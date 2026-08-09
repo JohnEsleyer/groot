@@ -12,6 +12,8 @@ pub struct GoScriptComponent {
 }
 
 /// Resource holding the GoScript hot-reload VM and script bookkeeping.
+/// Stored as a `NonSend` resource because `goscript` uses `Rc` and `RefCell`
+/// for single-threaded scripting performance.
 pub struct GrootScriptHost {
     engine: HotReloadEngine,
     script_path: String,
@@ -55,9 +57,9 @@ impl GrootScriptHost {
         }
     }
 
-    /// Recompile the script if the `.go` file changed on disk. Globals already
+    /// Recompile the script if the `.gs` file changed on disk. Globals already
     /// in the VM survive the swap (work-in-progress game state is preserved).
-    fn reload_if_changed(&mut self) {
+    pub fn reload_if_changed(&mut self) {
         if let Err(e) = self.engine.reload_if_changed() {
             error!("[GROOT HOT-RELOAD]: {e}");
         }
@@ -65,7 +67,7 @@ impl GrootScriptHost {
 
     /// Push the current frame's input state into the VM, then run the script's
     /// `OnUpdate(dt)` function through the live VM.
-    fn push_input_and_tick(&mut self, move_x: f64, move_y: f64, space: bool, dt: f64) {
+    pub fn push_input_and_tick(&mut self, move_x: f64, move_y: f64, space: bool, dt: f64) {
         let vm = &mut self.engine.vm;
 
         vm.register_fn("groot.GetAxis", move |args| {
@@ -100,7 +102,7 @@ pub struct GrootPlugin;
 
 impl Plugin for GrootPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(GrootScriptHost::new("assets/scripts/player.go"))
+        app.insert_non_send_resource(GrootScriptHost::new("assets/scripts/player.gs"))
             .add_systems(
                 Update,
                 (
@@ -112,12 +114,12 @@ impl Plugin for GrootPlugin {
     }
 }
 
-fn script_hot_reload_system(mut host: ResMut<GrootScriptHost>) {
+fn script_hot_reload_system(mut host: NonSendMut<GrootScriptHost>) {
     host.reload_if_changed();
 }
 
 fn script_update_system(
-    mut host: ResMut<GrootScriptHost>,
+    mut host: NonSendMut<GrootScriptHost>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
 ) {
