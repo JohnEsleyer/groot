@@ -187,22 +187,6 @@ func OnUpdate(dt float64) {
         .to_string(),
     );
 
-    fs::create_dir_all(project_path.join(".vscode")).unwrap_or_else(|e| {
-        eprintln!("Error creating .vscode: {e}");
-        std::process::exit(1);
-    });
-
-    write_or_die(
-        project_path.join(".vscode/settings.json"),
-        r#"{
-  "files.associations": {
-    "*.gos": "go"
-  }
-}
-"#
-        .to_string(),
-    );
-
     write_or_die(
         project_path.join(".gitignore"),
         r#"# Build artifacts
@@ -217,8 +201,7 @@ Thumbs.db
 *.swo
 *~
 .idea/
-.vscode/*
-!.vscode/settings.json
+.vscode/
 
 # Environment files
 .env
@@ -240,7 +223,6 @@ Thumbs.db
     println!("  {}/assets/prefabs/player.prefab.ron", project_path.display());
     println!("  {}/assets/scenes/main.scene.ron", project_path.display());
     println!("  {}/assets/scripts/player.gos", project_path.display());
-    println!("  {}/.vscode/settings.json", project_path.display());
     println!("  {}/.gitignore", project_path.display());
     println!();
     println!("Next: run `groot run` to play.");
