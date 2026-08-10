@@ -81,6 +81,10 @@ fn cmd_new(args: &[String]) {
 
     println!("Initializing Groot project: '{name}' ...");
 
+    fs::create_dir_all(project_path.join("src")).unwrap_or_else(|e| {
+        eprintln!("Error creating src: {e}");
+        std::process::exit(1);
+    });
     fs::create_dir_all(project_path.join("assets/prefabs")).unwrap_or_else(|e| {
         eprintln!("Error creating assets/prefabs: {e}");
         std::process::exit(1);
@@ -93,6 +97,32 @@ fn cmd_new(args: &[String]) {
         eprintln!("Error creating assets/scripts: {e}");
         std::process::exit(1);
     });
+
+    write_or_die(
+        project_path.join("Cargo.toml"),
+        format!(
+            r#"[package]
+name = "{name}"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+groot = {{ git = "https://github.com/JohnEsleyer/groot" }}
+
+[profile.dev]
+opt-level = 1
+"#
+        ),
+    );
+
+    write_or_die(
+        project_path.join("src/main.rs"),
+        r#"fn main() {
+    groot::run_game("assets/config.ron");
+}
+"#
+        .to_string(),
+    );
 
     write_or_die(
         project_path.join("assets/config.ron"),
@@ -219,13 +249,15 @@ Thumbs.db
     println!();
     println!("Project '{name}' created successfully!");
     println!();
+    println!("  {}/Cargo.toml", project_path.display());
+    println!("  {}/src/main.rs", project_path.display());
     println!("  {}/assets/config.ron", project_path.display());
     println!("  {}/assets/prefabs/player.prefab.ron", project_path.display());
     println!("  {}/assets/scenes/main.scene.ron", project_path.display());
     println!("  {}/assets/scripts/player.gos", project_path.display());
     println!("  {}/.gitignore", project_path.display());
     println!();
-    println!("Next: run `groot run` to play.");
+    println!("Next: cd {name} && groot run");
 }
 
 fn cmd_run(dir: Option<&str>) {
