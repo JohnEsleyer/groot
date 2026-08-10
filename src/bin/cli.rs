@@ -185,6 +185,29 @@ func OnUpdate(dt float64) {
     );
 
     write_or_die(
+        project_path.join(".gitignore"),
+        r#"# Build artifacts
+/target
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/*
+!.vscode/settings.json
+
+# Environment files
+.env
+"#
+        .to_string(),
+    );
+
+    write_or_die(
         project_path.join("README.md"),
         format!(
             "# {name}\n\nA Groot game project. RON prefabs live in `assets/prefabs/`, scenes in `assets/scenes/`, and GoScript in `assets/scripts/`.\n\n- `groot run` to run\n- `groot build` to build a release bundle\n"
@@ -199,6 +222,7 @@ func OnUpdate(dt float64) {
     println!("  {}/assets/scenes/main.scene.ron", project_path.display());
     println!("  {}/assets/scripts/player.gos", project_path.display());
     println!("  {}/.vscode/settings.json", project_path.display());
+    println!("  {}/.gitignore", project_path.display());
     println!();
     println!("Next: run `groot run` to play.");
 }
