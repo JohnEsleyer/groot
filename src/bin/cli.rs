@@ -2,6 +2,23 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct Registry {
+    version: String,
+    plugins: Vec<PluginEntry>,
+}
+
+#[derive(Deserialize)]
+struct PluginEntry {
+    name: String,
+    description: String,
+    author: String,
+    #[serde(rename = "path")]
+    _path: String,
+}
+
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn print_help() {
@@ -268,17 +285,28 @@ fn cmd_plugin(args: &[String]) {
 
     match subcmd.as_str() {
         "list" => {
-            println!("==================================================");
-            println!("           GROOT PLUGIN STORE REGISTRY            ");
-            println!("==================================================");
             let registry_path = std::path::Path::new("../groot-plugins/index.ron");
             if let Ok(content) = fs::read_to_string(registry_path) {
-                println!("{content}");
+                match ron::from_str::<Registry>(&content) {
+                    Ok(registry) => {
+                        println!("Groot Plugins (registry v{})", registry.version);
+                        println!();
+                        for p in &registry.plugins {
+                            println!("  {} — {}", p.name, p.description);
+                            println!("    by {} | groot plugin add {}", p.author, p.name);
+                            println!();
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Error parsing plugin registry: {e}");
+                    }
+                }
             } else {
-                println!("- audio   : Simple audio synthesizer & sound effects");
-                println!("- gizmos  : 2D/3D debug shape line drawer");
+                eprintln!("No plugin registry found at ../groot-plugins/index.ron");
+                eprintln!("Available plugins:");
+                eprintln!("  audio   — Simple audio synthesizer & sound effects");
+                eprintln!("  gizmos  — 2D/3D debug shape line drawer");
             }
-            println!("==================================================");
         }
         "add" => {
             let Some(name) = args.get(1) else {
