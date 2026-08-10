@@ -733,6 +733,9 @@ dependencies = [
  "env_logger",
  "glam",
  "goscript",
+ "groot-plugin-api",
+ "groot-plugin-audio",
+ "groot-plugin-gizmos",
  "hecs",
  "log",
  "pollster",
@@ -740,6 +743,33 @@ dependencies = [
  "serde",
  "wgpu",
  "winit",
+]
+
+[[package]]
+name = "groot-plugin-api"
+version = "0.1.0"
+dependencies = [
+ "goscript",
+ "hecs",
+ "log",
+]
+
+[[package]]
+name = "groot-plugin-audio"
+version = "0.1.0"
+dependencies = [
+ "goscript",
+ "groot-plugin-api",
+ "log",
+]
+
+[[package]]
+name = "groot-plugin-gizmos"
+version = "0.1.0"
+dependencies = [
+ "goscript",
+ "groot-plugin-api",
+ "log",
 ]
 
 [[package]]

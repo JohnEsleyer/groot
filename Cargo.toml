@@ -37,5 +37,12 @@ env_logger = "0.11"
 # GoScript scripting engine
 goscript = { git = "https://github.com/johnesleyer/goscript", branch = "main" }
 
+# Plugin API
+groot-plugin-api = { path = "../groot-plugin-api" }
+
+groot-plugin-audio = { path = "../groot-plugin-audio" }
+
+groot-plugin-gizmos = { path = "../groot-plugin-gizmos" }
+
 [profile.dev]
 opt-level = 1

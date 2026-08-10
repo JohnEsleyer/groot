@@ -286,15 +286,20 @@ fn cmd_plugin(args: &[String]) {
                 return;
             };
             println!("Installing plugin '{name}' into Cargo.toml...");
-            let dep = format!("\ngroot-plugin-{name} = {{ path = \"../groot-plugin-{name}\" }}\n");
+            let dep_line = format!("groot-plugin-{name} = {{ path = \"../groot-plugin-{name}\" }}");
             let mut cargo_toml = fs::read_to_string("Cargo.toml").unwrap_or_default();
-            if !cargo_toml.contains(&format!("groot-plugin-{name}")) {
-                cargo_toml.push_str(&dep);
-                fs::write("Cargo.toml", cargo_toml).unwrap();
-                println!("Successfully added 'groot-plugin-{name}' to Cargo.toml!");
-            } else {
+            if cargo_toml.contains(&format!("groot-plugin-{name}")) {
                 println!("Plugin 'groot-plugin-{name}' is already installed.");
+                return;
             }
+            // Insert dependency after [dependencies] section header, before [profile.dev]
+            if let Some(pos) = cargo_toml.find("[profile.dev]") {
+                cargo_toml.insert_str(pos, &format!("{dep_line}\n\n"));
+            } else {
+                cargo_toml.push_str(&format!("\n{dep_line}\n"));
+            }
+            fs::write("Cargo.toml", cargo_toml).unwrap();
+            println!("Successfully added 'groot-plugin-{name}' to Cargo.toml!");
         }
         "remove" => {
             let Some(name) = args.get(1) else {
