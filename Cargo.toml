@@ -40,6 +40,9 @@ goscript = { git = "https://github.com/johnesleyer/goscript", branch = "main" }
 # Plugin API
 groot-plugin-api = { path = "../groot-plugin-api" }
 
+# Binary asset embedding
+rust-embed = "8.4"
+
 groot-plugin-audio = { path = "../groot-plugin-audio" }
 
 groot-plugin-gizmos = { path = "../groot-plugin-gizmos" }

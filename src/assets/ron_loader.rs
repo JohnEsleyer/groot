@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::fs;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GrootConfig {
@@ -12,10 +11,13 @@ pub struct GrootConfig {
 
 impl GrootConfig {
     pub fn load(path: &str) -> Self {
-        let raw = fs::read_to_string(path).unwrap_or_else(|e| {
-            log::warn!("[GROOT CONFIG] Missing '{path}' ({e}); using fallback");
-            String::new()
-        });
+        let raw = match crate::assets::load_asset_str(path) {
+            Some(raw) => raw,
+            None => {
+                log::warn!("[GROOT CONFIG] Missing '{path}'; using fallback");
+                return Self::default();
+            }
+        };
         ron::from_str(&raw).unwrap_or_default()
     }
 }
@@ -137,7 +139,7 @@ pub struct PrefabConfig {
 
 impl PrefabConfig {
     pub fn load(path: &str) -> Option<Self> {
-        let raw = fs::read_to_string(path).ok()?;
+        let raw = crate::assets::load_asset_str(path)?;
         ron::from_str(&raw).ok()
     }
 }
@@ -151,7 +153,13 @@ pub struct SceneConfig {
 
 impl SceneConfig {
     pub fn load(path: &str) -> Self {
-        let raw = fs::read_to_string(path).unwrap_or_default();
+        let raw = match crate::assets::load_asset_str(path) {
+            Some(raw) => raw,
+            None => {
+                log::warn!("[GROOT SCENE] Cannot read '{path}'");
+                return Self::default();
+            }
+        };
         ron::from_str(&raw).unwrap_or_default()
     }
 }

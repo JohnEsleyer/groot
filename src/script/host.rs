@@ -58,12 +58,13 @@ impl GrootScriptHost {
     }
 
     pub fn ensure_engine(&mut self, script_path: &str) -> &mut HotReloadEngine {
+        let resolved_path = crate::assets::prepare_script_path(script_path);
         let input_ref = Rc::clone(&self.input);
         let plugin_mgr_ref = &self.plugin_mgr;
         self.engines
             .entry(script_path.to_string())
             .or_insert_with(|| {
-                let mut engine = HotReloadEngine::new(script_path);
+                let mut engine = HotReloadEngine::new(&resolved_path);
                 let vm = &mut engine.vm;
 
                 vm.register_groot_module();
