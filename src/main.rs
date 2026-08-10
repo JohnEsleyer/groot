@@ -1,6 +1,7 @@
 mod assets;
 mod ecs;
 mod groot_module;
+pub mod plugin;
 mod render;
 mod script;
 
@@ -65,6 +66,10 @@ fn main() {
     let cube_mesh = Mesh::cuboid(&render_ctx.device, 1.0, 1.0, 1.0);
     let mut world = World::new();
     let mut script_host = GrootScriptHost::new();
+
+    // Register plugins (uncomment when plugins are added as dependencies):
+    // script_host.plugin_mgr.add(groot_plugin_audio::AudioPlugin);
+    // script_host.plugin_mgr.add(groot_plugin_gizmos::GizmosPlugin);
 
     spawn_scene(&mut world, &config.initial_scene);
 

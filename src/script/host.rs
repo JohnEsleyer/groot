@@ -10,6 +10,7 @@ use hecs::World;
 use crate::assets::ron_loader::PrefabConfig;
 use crate::ecs::*;
 use crate::groot_module::GrootModuleExt;
+use crate::plugin::PluginManager;
 use crate::script::input::InputState;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -44,6 +45,7 @@ static SPAWN_REQUESTS: Mutex<Vec<SpawnRequest>> = Mutex::new(Vec::new());
 pub struct GrootScriptHost {
     engines: HashMap<String, HotReloadEngine>,
     pub input: Rc<InputState>,
+    pub plugin_mgr: PluginManager,
 }
 
 impl GrootScriptHost {
@@ -51,11 +53,13 @@ impl GrootScriptHost {
         Self {
             engines: HashMap::new(),
             input: Rc::new(InputState::new()),
+            plugin_mgr: PluginManager::new(),
         }
     }
 
     pub fn ensure_engine(&mut self, script_path: &str) -> &mut HotReloadEngine {
         let input_ref = Rc::clone(&self.input);
+        let plugin_mgr_ref = &self.plugin_mgr;
         self.engines
             .entry(script_path.to_string())
             .or_insert_with(|| {
@@ -63,6 +67,7 @@ impl GrootScriptHost {
                 let vm = &mut engine.vm;
 
                 vm.register_groot_module();
+                plugin_mgr_ref.register_all_script_bindings(vm);
 
                 let inp_axis = Rc::clone(&input_ref);
                 vm.register_fn("groot.GetAxis", move |args| {
@@ -191,6 +196,7 @@ impl GrootScriptHost {
 
 pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
     host.reload_all();
+    host.plugin_mgr.update_all(world, dt);
 
     ENTITY_POSITIONS.with(|snapshot| {
         let mut map = snapshot.borrow_mut();

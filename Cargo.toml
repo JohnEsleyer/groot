@@ -5,6 +5,10 @@ edition = "2021"
 description = "Groot: a fast-iteration 2D/3D game engine powered by wgpu and GoScript"
 default-run = "groot-demo"
 
+[lib]
+name = "groot"
+path = "src/lib.rs"
+
 [[bin]]
 name = "groot"
 path = "src/bin/cli.rs"

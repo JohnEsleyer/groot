@@ -14,6 +14,7 @@ fn print_help() {
     println!("  new <name>   - Scaffold a new Groot project");
     println!("  run [path]   - Run the Groot game (cargo run)");
     println!("  build        - Build release binary (cargo build --release)");
+    println!("  plugin       - Manage plugins (list, add, remove)");
     println!("  info         - Print engine version and workspace info");
     println!("  help         - Show this help");
     println!("==================================================");
@@ -30,6 +31,7 @@ fn main() {
         "new" => cmd_new(&args[2..]),
         "run" => cmd_run(args.get(2).map(|s| s.as_str())),
         "build" => cmd_build(),
+        "plugin" => cmd_plugin(&args[2..]),
         "info" => cmd_info(),
         "help" | "--help" | "-h" => print_help(),
         "version" | "--version" | "-V" => {
@@ -256,6 +258,60 @@ fn cmd_build() {
             std::process::exit(1);
         });
     std::process::exit(status.code().unwrap_or(0));
+}
+
+fn cmd_plugin(args: &[String]) {
+    let Some(subcmd) = args.first() else {
+        println!("Usage: groot plugin <list|add|remove> [name]");
+        return;
+    };
+
+    match subcmd.as_str() {
+        "list" => {
+            println!("==================================================");
+            println!("           GROOT PLUGIN STORE REGISTRY            ");
+            println!("==================================================");
+            let registry_path = std::path::Path::new("../groot-plugins/index.ron");
+            if let Ok(content) = fs::read_to_string(registry_path) {
+                println!("{content}");
+            } else {
+                println!("- audio   : Simple audio synthesizer & sound effects");
+                println!("- gizmos  : 2D/3D debug shape line drawer");
+            }
+            println!("==================================================");
+        }
+        "add" => {
+            let Some(name) = args.get(1) else {
+                eprintln!("Error: missing plugin name. Usage: groot plugin add <name>");
+                return;
+            };
+            println!("Installing plugin '{name}' into Cargo.toml...");
+            let dep = format!("\ngroot-plugin-{name} = {{ path = \"../groot-plugin-{name}\" }}\n");
+            let mut cargo_toml = fs::read_to_string("Cargo.toml").unwrap_or_default();
+            if !cargo_toml.contains(&format!("groot-plugin-{name}")) {
+                cargo_toml.push_str(&dep);
+                fs::write("Cargo.toml", cargo_toml).unwrap();
+                println!("Successfully added 'groot-plugin-{name}' to Cargo.toml!");
+            } else {
+                println!("Plugin 'groot-plugin-{name}' is already installed.");
+            }
+        }
+        "remove" => {
+            let Some(name) = args.get(1) else {
+                eprintln!("Error: missing plugin name. Usage: groot plugin remove <name>");
+                return;
+            };
+            println!("Removing plugin '{name}' from Cargo.toml...");
+            let cargo_toml = fs::read_to_string("Cargo.toml").unwrap_or_default();
+            let filtered: Vec<&str> = cargo_toml
+                .lines()
+                .filter(|line| !line.contains(&format!("groot-plugin-{name}")))
+                .collect();
+            fs::write("Cargo.toml", filtered.join("\n")).unwrap();
+            println!("Successfully removed 'groot-plugin-{name}'!");
+        }
+        _ => println!("Unknown plugin command. Use list, add, or remove."),
+    }
 }
 
 fn cmd_info() {
