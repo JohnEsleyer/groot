@@ -1,9 +1,11 @@
+mod assets;
+mod ecs;
 mod groot_module;
 mod render;
 
 use std::sync::Arc;
-use std::time::Instant;
-use glam::Mat4;
+use assets::*;
+use ecs::*;
 use render::*;
 use wgpu::util::DeviceExt;
 use winit::{
@@ -17,19 +19,25 @@ fn main() {
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    log::info!("Starting Groot 3D Engine (wgpu + winit)...");
+    let config = GrootConfig::load("assets/config.ron");
+    log::info!("Starting Groot Engine: {}", config.project.name);
 
     let event_loop = EventLoop::new().expect("Failed to create EventLoop");
     let window = Arc::new(
         WindowBuilder::new()
-            .with_title("Groot 3D Engine (Bare Metal wgpu)")
-            .with_inner_size(winit::dpi::LogicalSize::new(1280.0, 720.0))
+            .with_title(&config.window.title)
+            .with_inner_size(winit::dpi::LogicalSize::new(
+                config.window.width,
+                config.window.height,
+            ))
             .build(&event_loop)
             .expect("Failed to create Window"),
     );
 
-    let clear_color = (0.08, 0.09, 0.12, 1.0);
-    let mut render_ctx = pollster::block_on(RenderContext::new(Arc::clone(&window), clear_color));
+    let mut render_ctx = pollster::block_on(RenderContext::new(
+        Arc::clone(&window),
+        config.render.clear_color,
+    ));
 
     let pipeline_3d = Pipeline3D::new(&render_ctx.device, render_ctx.config.format);
     let mut camera = Camera3D::new(render_ctx.config.width as f32, render_ctx.config.height as f32);
@@ -50,15 +58,10 @@ fn main() {
         }],
     });
 
-    let cube_mesh = Mesh::cuboid(&render_ctx.device, 1.5, 1.5, 1.5);
-    let gold_color = [1.0, 0.84, 0.0, 1.0];
-    let (model_bind_group, model_buffer) = pipeline_3d.create_model_bind_group(
-        &render_ctx.device,
-        Mat4::IDENTITY,
-        gold_color,
-    );
+    let cube_mesh = Mesh::cuboid(&render_ctx.device, 1.0, 1.0, 1.0);
+    let mut world = World::new();
 
-    let start_time = Instant::now();
+    spawn_scene(&mut world, &config.initial_scene);
 
     let _ = event_loop.run(move |event, target| match event {
         Event::WindowEvent { ref event, window_id } if window_id == window.id() => match event {
@@ -68,17 +71,8 @@ fn main() {
                 camera.aspect = physical_size.width as f32 / physical_size.height.max(1) as f32;
             }
             WindowEvent::RedrawRequested => {
-                let elapsed = start_time.elapsed().as_secs_f32();
-
                 camera_uniform = camera.build_uniform();
                 render_ctx.queue.write_buffer(&camera_buffer, 0, bytemuck::cast_slice(&[camera_uniform]));
-
-                let rotation = Mat4::from_rotation_y(elapsed) * Mat4::from_rotation_x(elapsed * 0.5);
-                let model_uniform = pipeline_3d::ModelUniform {
-                    model: rotation.to_cols_array_2d(),
-                    color: gold_color,
-                };
-                render_ctx.queue.write_buffer(&model_buffer, 0, bytemuck::cast_slice(&[model_uniform]));
 
                 let output = match render_ctx.surface.get_current_texture() {
                     Ok(tex) => tex,
@@ -98,12 +92,20 @@ fn main() {
 
                 let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
                 let mut encoder = render_ctx.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Main Command Encoder"),
+                    label: Some("Main Encoder"),
                 });
+
+                let model_bind_groups: Vec<(wgpu::BindGroup, wgpu::Buffer)> = world
+                    .query_mut::<(&Transform3D, &Visual3D)>()
+                    .into_iter()
+                    .map(|(_id, (tf, vis))| {
+                        pipeline_3d.create_model_bind_group(&render_ctx.device, tf.matrix(), vis.color)
+                    })
+                    .collect();
 
                 {
                     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("3D Render Pass"),
+                        label: Some("3D Scene Pass"),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                             view: &view,
                             resolve_target: None,
@@ -126,10 +128,13 @@ fn main() {
 
                     render_pass.set_pipeline(&pipeline_3d.render_pipeline);
                     render_pass.set_bind_group(0, &camera_bind_group, &[]);
-                    render_pass.set_bind_group(1, &model_bind_group, &[]);
-                    render_pass.set_vertex_buffer(0, cube_mesh.vertex_buffer.slice(..));
-                    render_pass.set_index_buffer(cube_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-                    render_pass.draw_indexed(0..cube_mesh.num_indices, 0, 0..1);
+
+                    for (bind_group, _buf) in &model_bind_groups {
+                        render_pass.set_bind_group(1, bind_group, &[]);
+                        render_pass.set_vertex_buffer(0, cube_mesh.vertex_buffer.slice(..));
+                        render_pass.set_index_buffer(cube_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                        render_pass.draw_indexed(0..cube_mesh.num_indices, 0, 0..1);
+                    }
                 }
 
                 render_ctx.queue.submit(std::iter::once(encoder.finish()));
