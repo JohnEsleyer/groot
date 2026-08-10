@@ -2,7 +2,7 @@
 name = "groot"
 version = "0.1.0"
 edition = "2021"
-description = "Groot: a fast-iteration 2D/3D game engine pairing Bevy with the GoScript embedded scripting VM"
+description = "Groot: a fast-iteration 2D/3D game engine powered by wgpu and GoScript"
 default-run = "groot-demo"
 
 [[bin]]
@@ -14,11 +14,23 @@ name = "groot-demo"
 path = "src/main.rs"
 
 [dependencies]
-bevy = "0.13"
+# Graphics & Windowing
+winit = "0.29"
+wgpu = "0.19"
+glam = "0.27"
+bytemuck = { version = "1.14", features = ["derive"] }
+pollster = "0.3"
+
+# ECS & Asset Serialization
+hecs = "0.10"
 serde = { version = "1", features = ["derive"] }
 ron = "0.8"
 
-# GoScript scripting crate, fetched from the upstream GitHub repository.
+# Logging & Utilities
+log = "0.4"
+env_logger = "0.11"
+
+# GoScript scripting engine
 goscript = { git = "https://github.com/johnesleyer/goscript", branch = "main" }
 
 [profile.dev]

@@ -15,19 +15,19 @@ impl GrootModuleExt for VirtualMachine {
         // --- Logging -----------------------------------------------------------
         self.register_fn("groot.Log", |args| {
             let msg: Vec<String> = args.iter().map(|a| a.to_string()).collect();
-            bevy::log::info!("[GROOT LOG]: {}", msg.join(" "));
+            log::info!("[GROOT LOG]: {}", msg.join(" "));
             Value::Nil
         });
 
         self.register_fn("groot.Warn", |args| {
             let msg: Vec<String> = args.iter().map(|a| a.to_string()).collect();
-            bevy::log::warn!("[GROOT WARN]: {}", msg.join(" "));
+            log::warn!("[GROOT WARN]: {}", msg.join(" "));
             Value::Nil
         });
 
         self.register_fn("groot.Error", |args| {
             let msg: Vec<String> = args.iter().map(|a| a.to_string()).collect();
-            bevy::log::error!("[GROOT ERROR]: {}", msg.join(" "));
+            log::error!("[GROOT ERROR]: {}", msg.join(" "));
             Value::Nil
         });
 

@@ -1,6 +1,6 @@
 # Groot
 
-Groot is a fast-iteration 2D/3D game engine pairing **Bevy** (Rust ECS + rendering)
+Groot is a fast-iteration 2D/3D game engine powered by **wgpu** (modern GPU rendering)
 with **GoScript** — an embeddable Go-syntax scripting VM written in pure Rust.
 Game logic lives in `.gos` files under `assets/scripts/` and hot-reloads on save;
 visuals and prefab hierarchies live in RON asset files under `assets/prefabs/` and `assets/scenes/`.
@@ -11,7 +11,7 @@ Groot is **data-driven**: scripts own behavior and data; the host engine owns
 representation and rendering. Visuals are declared as RON prefab data.
 
 ```
-assets/scenes/*.scene.ron  ──►  Bevy ECS (3D Meshes, Lights, Sprites, UI)
+assets/scenes/*.scene.ron  ──►  hecs ECS (3D Meshes, Lights, Sprites, UI)
 assets/prefabs/*.prefab.ron ──►  RonAssetWatcher (Visual Hot Reloading)
 assets/scripts/*.gos        ──►  GoScript VM (Logic Hot Reloading)  ──► Entity Data
                                          ▲                                  │
@@ -21,8 +21,9 @@ assets/scripts/*.gos        ──►  GoScript VM (Logic Hot Reloading)  ──
 - `assets/config.ron` — project config & render settings.
 - `assets/prefabs/*.prefab.ron` — 2D/3D prefabs (sprites, text, 3D PBR meshes, lights, colliders, parent-child hierarchies).
 - `assets/scenes/*.scene.ron` — scene layout, environment settings, cameras, entity initializers.
-- `src/main.rs` — initializes Bevy, loads `assets/config.ron`, runs `GrootPlugin`.
-- `src/groot_plugin.rs` — engine core: components (`GoScriptComponent`, `ScriptTransform`, `ScriptColor`, `Collider`), dual hot reloading, ECS execution, 2D/3D gizmos.
+- `src/main.rs` — initializes winit window and wgpu render context, runs main event loop.
+- `src/render/` — pure wgpu rendering engine (3D meshes, 2D sprites, text, gizmos).
+- `src/groot_module.rs` — engine core: components, GoScript integration, ECS execution.
 
 ## CLI
 
@@ -64,6 +65,12 @@ func OnUpdate(dt float64) {
 
 ## Dependencies
 
-- `bevy` 0.13
-- `ron` 0.8
-- `goscript` (git: `github.com/johnesleyer/goscript`)
+- `winit` 0.29 - Cross-platform windowing and input
+- `wgpu` 0.19 - Modern GPU rendering (WebGPU/Vulkan/Metal/DX12)
+- `glam` 0.27 - Fast 3D/2D math library
+- `hecs` 0.10 - Minimalist archetype ECS
+- `bytemuck` 1.14 - Safe casting for GPU buffers
+- `pollster` 0.3 - Block on async operations
+- `ron` 0.8 - Rusty Object Notation for assets
+- `serde` 1 - Serialization framework
+- `goscript` (git: `github.com/johnesleyer/goscript`) - GoScript VM
