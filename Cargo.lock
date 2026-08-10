@@ -715,7 +715,7 @@ dependencies = [
 [[package]]
 name = "goscript"
 version = "0.1.0"
-source = "git+https://github.com/johnesleyer/goscript?branch=main#897b7700a11b3e9c3264fed5f4bfab2794eef49a"
+source = "git+https://github.com/johnesleyer/goscript?branch=main#f70262f43b057d4dddd1378dbc20d11efc6a8bd3"
 
 [[package]]
 name = "gpu-alloc"
@@ -793,6 +793,7 @@ dependencies = [
 [[package]]
 name = "groot-plugin-api"
 version = "0.1.0"
+source = "git+https://github.com/JohnEsleyer/groot-plugin-api#66677346e81b43b2c7e2e96f831f88bb0af0c3ec"
 dependencies = [
  "goscript",
  "hecs",
@@ -802,6 +803,7 @@ dependencies = [
 [[package]]
 name = "groot-plugin-audio"
 version = "0.1.0"
+source = "git+https://github.com/JohnEsleyer/groot-plugin-audio#8379d188fd869c7018273ed3238f7b905521bb5a"
 dependencies = [
  "goscript",
  "groot-plugin-api",
@@ -811,6 +813,7 @@ dependencies = [
 [[package]]
 name = "groot-plugin-gizmos"
 version = "0.1.0"
+source = "git+https://github.com/JohnEsleyer/groot-plugin-gizmos#7768cd2a83c7a14c988e964f77412561ad98395a"
 dependencies = [
  "goscript",
  "groot-plugin-api",

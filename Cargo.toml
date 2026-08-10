@@ -38,14 +38,14 @@ env_logger = "0.11"
 goscript = { git = "https://github.com/johnesleyer/goscript", branch = "main" }
 
 # Plugin API
-groot-plugin-api = { path = "../groot-plugin-api" }
+groot-plugin-api = { git = "https://github.com/JohnEsleyer/groot-plugin-api" }
 
 # Binary asset embedding
 rust-embed = "8.4"
 
-groot-plugin-audio = { path = "../groot-plugin-audio" }
+groot-plugin-audio = { git = "https://github.com/JohnEsleyer/groot-plugin-audio" }
 
-groot-plugin-gizmos = { path = "../groot-plugin-gizmos" }
+groot-plugin-gizmos = { git = "https://github.com/JohnEsleyer/groot-plugin-gizmos" }
 
 [profile.dev]
 opt-level = 1
