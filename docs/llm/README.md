@@ -1,4 +1,4 @@
-# LLM Contributor Guide — Groot (Bevy + GoScript)
+# LLM Contributor Guide — Groot (wgpu + GoScript)
 
 Technical notes and conventions for LLMs working on the Groot engine.
 
@@ -9,11 +9,14 @@ Technical notes and conventions for LLMs working on the Groot engine.
 Groot is a data-driven hybrid 2D/3D engine:
 - **Data/Visuals** — Declarative RON files under `assets/prefabs/` and `assets/scenes/`.
 - **Behavior** — GoScript files under `assets/scripts/`.
-- **Presentation & ECS** — Bevy 0.13.
+- **Presentation & ECS** — wgpu 0.19 (rendering) + winit 0.29 (windowing) + hecs 0.10 (ECS).
 
 ### Crate structure
-- `goscript` (library) — the GoScript VM, compiler, hot-reload engine
-- `groot` (binary) — the Bevy game engine that embeds goscript
+- `groot-plugin-api` (library) — shared `GrootPlugin` trait and `PluginManager`
+- `groot` (binary + library) — the game engine: wgpu rendering, hecs ECS, GoScript VM
+- `groot-plugin-audio` (library) — sample audio plugin
+- `groot-plugin-gizmos` (library) — sample gizmos plugin
+- `groot-plugins` — plugin registry index
 
 ### Key files
 | File | Purpose |
@@ -21,21 +24,26 @@ Groot is a data-driven hybrid 2D/3D engine:
 | `assets/config.ron` | Project config: window, render settings, initial scene path |
 | `assets/prefabs/*.prefab.ron` | RON prefabs: 2D/3D visuals, colliders, scripts, child hierarchies |
 | `assets/scenes/*.scene.ron` | Scene layout: camera, lighting, entity instantiation |
-| `src/main.rs` | Loads `assets/config.ron`, builds window, runs `GrootPlugin` |
-| `src/groot_plugin.rs` | Core Bevy plugin: RON schemas, components, host functions, ECS systems |
-| `src/groot_module.rs` | Stateless `GrootModuleExt` trait (math, collision, logging) |
-| `src/bin/cli.rs` | `groot` CLI — scaffolds/runs/builds projects |
+| `src/main.rs` | Initializes winit window + wgpu context, runs main event loop |
+| `src/lib.rs` | Library root: exposes `plugin`, `ecs`, `render`, `assets` modules |
+| `src/plugin.rs` | Re-exports `GrootPlugin` and `PluginManager` from `groot-plugin-api` |
+| `src/render/` | wgpu rendering: camera, mesh pipeline, 3D PBR |
+| `src/ecs/` | hecs ECS components and queries |
+| `src/script/` | GoScript VM host, input tracking, script execution |
+| `src/groot_module.rs` | Stateless utility functions (math, logging) |
+| `src/bin/cli.rs` | `groot` CLI — scaffolds, runs, builds, manages plugins |
 
 ---
 
 ## 2. Architecture Rules (Never Violate)
 
 - **Scripts manipulate data, never rendering.** Debug visualization is driven by declared data.
-- **`GrootScriptHost` does NOT derive `Resource`.** goscript uses `Rc`/`RefCell` (not `Send`/`Sync`). Use `NonSend`/`NonSendMut`.
-- **`GrootModuleExt` is stateless.** Pure utility methods only.
+- **`GrootScriptHost` uses `Rc<RefCell<...>>` internally.** It is NOT `Send`/`Sync`.
+- **`groot_module.rs` is stateless.** Pure utility methods only.
 - **No global entity-state map.** Self state flows through thread-local scratch (`CURRENT_ENTITY` + `CURRENT_STATE`), synced to/from ECS components each frame.
 - **`static Mutex` only for cross-system queues:** `SPAWN_REQUESTS`, `SCRIPT_EVENTS`.
 - **Visuals are RON data.** To change how something looks, edit a `.prefab.ron` file.
+- **Plugins depend on `groot-plugin-api`, NOT on `groot` directly.** This avoids cyclic dependencies.
 
 ---
 
@@ -148,15 +156,14 @@ groot.RectsOverlap(...), groot.CirclesOverlap(...), groot.CircleHitsRect(...)
 
 ---
 
-## 5. Bevy System Pipeline
+## 5. Engine Pipeline (per frame)
 
-1. `script_hot_reload_system` — recompiles changed `.gos` files
-2. `ron_hot_reload_system` — live-reloads changed `.prefab.ron` files (updates visuals, preserves script state)
-3. `script_input_sync_system` — snapshots keyboard/mouse
-4. `script_execution_system` — runs `OnUpdate` per script entity, syncs Transform/Sprite/Material/Collider
-5. `handle_spawn_requests_system` — processes `groot.SpawnPrefab`/`groot.SpawnEntity`
-6. `handle_script_events_system` — logs `groot.EmitEvent` events
-7. `render_collider_debug_system` — draws 2D/3D collider wireframes
+1. **Window event** — winit dispatches input events
+2. **Input sync** — `InputState` snapshots keyboard/mouse state
+3. **Script hot reload** — `GrootScriptHost` recompiles changed `.gos` files
+4. **Script execution** — runs `OnUpdate` per script entity, syncs Transform/Sprite/Material/Collider
+5. **ECS world update** — hecs processes entity mutations
+6. **Render** — wgpu submits draw calls (3D PBR mesh pipeline, 2D sprites, text)
 
 ---
 
@@ -169,13 +176,14 @@ groot.RectsOverlap(...), groot.CirclesOverlap(...), groot.CircleHitsRect(...)
 
 ## 7. Adding a New Feature Checklist
 
-1. **Read existing host functions** in `groot_plugin.rs` — mimic the `groot.SnakeCaseName` pattern.
-2. **Pure math/log?** Add to `groot_module.rs`.
+1. **Read existing host functions** in `src/script/host.rs` — mimic the `groot.SnakeCaseName` pattern.
+2. **Pure math/log?** Add to `src/groot_module.rs`.
 3. **Per-entity data?** Use `CURRENT_ENTITY` / `CURRENT_STATE` thread-local scratch.
 4. **Cross-system command?** Use `static Mutex` queues.
 5. **New visual?** Define a `.prefab.ron` file; don't hardcode in Rust.
-6. **Run `cargo build`** — zero warnings required.
-7. **Test** with a `.gos` script and verify runtime behavior.
+6. **New plugin?** Create a crate depending on `groot-plugin-api`, implement `GrootPlugin`.
+7. **Run `cargo check`** — zero errors required.
+8. **Test** with a `.gos` script and verify runtime behavior.
 
 ---
 
@@ -183,8 +191,8 @@ groot.RectsOverlap(...), groot.CirclesOverlap(...), groot.CircleHitsRect(...)
 
 Users define **no Rust** to make visuals: prefabs in RON files map names to
 meshes/sprites/lights and optionally a behavior script. The engine's
-`spawn_scene_system` / `handle_spawn_requests_system` turn that data into Bevy
-bundles. Scripts are pure logic; the engine handles rendering.
+scene spawner and ECS systems turn that data into wgpu draw calls.
+Scripts are pure logic; the engine handles rendering.
 
 ---
 
@@ -194,7 +202,6 @@ The `CURRENT_STATE` thread-local scratch supports full 3D:
 - Position: `(x, y, z)`
 - Rotation: `(pitch, yaw, roll)` in Euler degrees
 - Scale: `(scale_x, scale_y, scale_z)`
-- Material color: `(r, g, b, a)` — applies to both Sprite and StandardMaterial
+- Material color: `(r, g, b, a)` — applies to both Sprite and PBR material
 
 Scripts can set 3D colliders (`Box3D`) via `groot.SetSelfCollider(x, y, z)`.
-The `render_collider_debug_system` draws 3D wireframe cuboids and spheres via Bevy Gizmos.

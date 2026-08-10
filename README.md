@@ -23,7 +23,60 @@ assets/scripts/*.gos        ──►  GoScript VM (Logic Hot Reloading)  ──
 - `assets/scenes/*.scene.ron` — scene layout, environment settings, cameras, entity initializers.
 - `src/main.rs` — initializes winit window and wgpu render context, runs main event loop.
 - `src/render/` — pure wgpu rendering engine (3D meshes, 2D sprites, text, gizmos).
-- `src/groot_module.rs` — engine core: components, GoScript integration, ECS execution.
+- `src/ecs/` — hecs-based ECS components and queries.
+- `src/script/` — GoScript VM host, input tracking, script execution.
+- `src/plugin.rs` — plugin trait and manager (re-exports from `groot-plugin-api`).
+
+## Plugin System
+
+Groot supports native Rust plugins via the `GrootPlugin` trait. Plugins are
+managed through the CLI and compiled as separate crates that depend on the
+shared `groot-plugin-api` crate.
+
+### Architecture
+
+```
+groot-plugin-api      ──►  Defines GrootPlugin trait + PluginManager
+groot-plugin-audio    ──►  Sample audio synthesizer plugin
+groot-plugin-gizmos   ──►  Sample debug shape drawer plugin
+groot-plugins/        ──►  Plugin registry (index.ron)
+```
+
+### Writing a Plugin
+
+```rust
+use groot_plugin_api::{GrootPlugin, VirtualMachine};
+use goscript::value::Value;
+
+pub struct MyPlugin;
+
+impl GrootPlugin for MyPlugin {
+    fn name(&self) -> &'static str {
+        "my-plugin"
+    }
+
+    fn register_script_bindings(&self, vm: &mut VirtualMachine) {
+        vm.register_fn("my_plugin.DoThing", |args| {
+            let x = args.first().and_then(|v| v.as_number()).unwrap_or(0.0);
+            log::info!("[MY PLUGIN] Doing thing at {x}");
+            Value::Nil
+        });
+    }
+}
+```
+
+### CLI Plugin Commands
+
+```bash
+# List available plugins
+groot plugin list
+
+# Install a plugin (adds to Cargo.toml)
+groot plugin add audio
+
+# Remove a plugin
+groot plugin remove audio
+```
 
 ## CLI
 
@@ -36,6 +89,11 @@ cargo run --bin groot -- run
 
 # Build a release bundle
 cargo run --bin groot -- build
+
+# Manage plugins
+cargo run --bin groot -- plugin list
+cargo run --bin groot -- plugin add audio
+cargo run --bin groot -- plugin remove audio
 ```
 
 ## Run the Demo
@@ -74,3 +132,4 @@ func OnUpdate(dt float64) {
 - `ron` 0.8 - Rusty Object Notation for assets
 - `serde` 1 - Serialization framework
 - `goscript` (git: `github.com/johnesleyer/goscript`) - GoScript VM
+- `groot-plugin-api` - Shared plugin trait and manager
