@@ -101,7 +101,7 @@ fn cmd_new(args: &[String]) {
         project_path.join("assets/prefabs/player.prefab.ron"),
         r#"(
     name: "player",
-    script: Some("assets/scripts/player.go"),
+    script: Some("assets/scripts/player.gos"),
     transform: (
         position: (0.0, 1.0, 0.0),
         rotation: (0.0, 0.0, 0.0),
@@ -151,7 +151,7 @@ fn cmd_new(args: &[String]) {
     );
 
     write_or_die(
-        project_path.join("assets/scripts/player.go"),
+        project_path.join("assets/scripts/player.gos"),
         r#"type Player struct { Speed float64 }
 var self = Player{Speed: 5.0}
 
@@ -163,6 +163,22 @@ func OnUpdate(dt float64) {
 
     groot.SetSelfCollider(1.0, 1.0, 1.0)
     groot.Log("Hello from Groot 3D GoScript!")
+}
+"#
+        .to_string(),
+    );
+
+    fs::create_dir_all(project_path.join(".vscode")).unwrap_or_else(|e| {
+        eprintln!("Error creating .vscode: {e}");
+        std::process::exit(1);
+    });
+
+    write_or_die(
+        project_path.join(".vscode/settings.json"),
+        r#"{
+  "files.associations": {
+    "*.gos": "go"
+  }
 }
 "#
         .to_string(),
@@ -181,7 +197,8 @@ func OnUpdate(dt float64) {
     println!("  {}/assets/config.ron", project_path.display());
     println!("  {}/assets/prefabs/player.prefab.ron", project_path.display());
     println!("  {}/assets/scenes/main.scene.ron", project_path.display());
-    println!("  {}/assets/scripts/player.go", project_path.display());
+    println!("  {}/assets/scripts/player.gos", project_path.display());
+    println!("  {}/.vscode/settings.json", project_path.display());
     println!();
     println!("Next: run `groot run` to play.");
 }

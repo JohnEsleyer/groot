@@ -2,7 +2,7 @@
 
 Groot is a fast-iteration 2D/3D game engine pairing **Bevy** (Rust ECS + rendering)
 with **GoScript** — an embeddable Go-syntax scripting VM written in pure Rust.
-Game logic lives in `.go` files under `assets/scripts/` and hot-reloads on save;
+Game logic lives in `.gos` files under `assets/scripts/` and hot-reloads on save;
 visuals and prefab hierarchies live in RON asset files under `assets/prefabs/` and `assets/scenes/`.
 
 ## Architecture
@@ -13,7 +13,7 @@ representation and rendering. Visuals are declared as RON prefab data.
 ```
 assets/scenes/*.scene.ron  ──►  Bevy ECS (3D Meshes, Lights, Sprites, UI)
 assets/prefabs/*.prefab.ron ──►  RonAssetWatcher (Visual Hot Reloading)
-assets/scripts/*.go        ──►  GoScript VM (Logic Hot Reloading)  ──► Entity Data
+assets/scripts/*.gos        ──►  GoScript VM (Logic Hot Reloading)  ──► Entity Data
                                          ▲                                  │
                                          └── groot.* host bindings ──────────┘
 ```
@@ -43,7 +43,7 @@ cargo run --bin groot -- build
 cargo run
 ```
 
-A 3D demo scene starts up featuring a player cube with child lighting controlled via WASD/Arrows and Space, a continuously rotating golden 3D cube, and a 2D HUD text overlay. Save any `.go` or `.prefab.ron` file to see live hot reloading!
+A 3D demo scene starts up featuring a player cube with child lighting controlled via WASD/Arrows and Space, a continuously rotating golden 3D cube, and a 2D HUD text overlay. Save any `.gos` or `.prefab.ron` file to see live hot reloading!
 
 ## Writing scripts
 

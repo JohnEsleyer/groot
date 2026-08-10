@@ -1,6 +1,6 @@
 (
     name: "player",
-    script: Some("assets/scripts/player_3d.go"),
+    script: Some("assets/scripts/player_3d.gos"),
     transform: (
         position: (0.0, 1.0, 0.0),
         rotation: (0.0, 0.0, 0.0),

@@ -1,6 +1,6 @@
 (
     name: "cube",
-    script: Some("assets/scripts/rotator.go"),
+    script: Some("assets/scripts/rotator.gos"),
     transform: (
         position: (3.0, 1.2, -2.0),
         rotation: (0.0, 0.0, 0.0),

@@ -55,7 +55,7 @@ Groot is a data-driven hybrid 2D/3D engine:
 ```ron
 (
     name: "entity_name",
-    script: Some("assets/scripts/go_file.go"),
+    script: Some("assets/scripts/file.gos"),
     transform: (
         position: (x, y, z),
         rotation: (pitch, yaw, roll),  // Euler degrees
@@ -150,7 +150,7 @@ groot.RectsOverlap(...), groot.CirclesOverlap(...), groot.CircleHitsRect(...)
 
 ## 5. Bevy System Pipeline
 
-1. `script_hot_reload_system` — recompiles changed `.go` files
+1. `script_hot_reload_system` — recompiles changed `.gos` files
 2. `ron_hot_reload_system` — live-reloads changed `.prefab.ron` files (updates visuals, preserves script state)
 3. `script_input_sync_system` — snapshots keyboard/mouse
 4. `script_execution_system` — runs `OnUpdate` per script entity, syncs Transform/Sprite/Material/Collider
@@ -162,7 +162,7 @@ groot.RectsOverlap(...), groot.CirclesOverlap(...), groot.CircleHitsRect(...)
 
 ## 6. Hot-Reload Workflow
 
-**GoScript:** Edit `.go` in `assets/scripts/`, save, VM recompiles, globals preserved.
+**GoScript:** Edit `.gos` in `assets/scripts/`, save, VM recompiles, globals preserved.
 **RON Prefabs:** Edit `.prefab.ron` in `assets/prefabs/`, save, engine re-spawns visuals (meshes, materials, colliders) while preserving `GoScriptComponent` state.
 
 ---
@@ -175,7 +175,7 @@ groot.RectsOverlap(...), groot.CirclesOverlap(...), groot.CircleHitsRect(...)
 4. **Cross-system command?** Use `static Mutex` queues.
 5. **New visual?** Define a `.prefab.ron` file; don't hardcode in Rust.
 6. **Run `cargo build`** — zero warnings required.
-7. **Test** with a `.go` script and verify runtime behavior.
+7. **Test** with a `.gos` script and verify runtime behavior.
 
 ---
 
