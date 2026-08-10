@@ -1,0 +1,40 @@
+(
+    name: "Main 3D Scene",
+    environment: (
+        ambient_light: Some((
+            color: Rgba(1.0, 1.0, 1.0, 1.0),
+            brightness: 0.25,
+        )),
+        camera: Some(Perspective3D(
+            fov: 60.0,
+            position: (0.0, 8.0, 14.0),
+            look_at: (0.0, 0.5, 0.0),
+        )),
+    ),
+    entities: [
+        (
+            prefab: "assets/prefabs/player.prefab.ron",
+            entity_id: Some(1),
+            tag: "Player",
+            transform_override: None,
+        ),
+        (
+            prefab: "assets/prefabs/cube.prefab.ron",
+            entity_id: Some(2),
+            tag: "RotatorCube",
+            transform_override: None,
+        ),
+        (
+            prefab: "assets/prefabs/ground.prefab.ron",
+            entity_id: None,
+            tag: "Ground",
+            transform_override: None,
+        ),
+        (
+            prefab: "assets/prefabs/hud.prefab.ron",
+            entity_id: None,
+            tag: "HUD",
+            transform_override: None,
+        ),
+    ],
+)

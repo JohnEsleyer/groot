@@ -5,10 +5,7 @@ use bevy::prelude::*;
 use groot_plugin::{GrootConfig, GrootPlugin};
 
 fn main() {
-    // Everything about the game — window, prefabs (visuals), and the initial
-    // scene — is declared as *data* in groot.toml. No Rust is needed to define
-    // what anything looks like; scripts only provide behavior.
-    let config = GrootConfig::load("groot.toml");
+    let config = GrootConfig::load("assets/config.ron");
 
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -19,12 +16,8 @@ fn main() {
             }),
             ..default()
         }))
+        .insert_resource(ClearColor(config.render.clear_color.to_color()))
         .add_plugins(GrootPlugin)
         .insert_resource(config)
-        .add_systems(Startup, setup_camera)
         .run();
-}
-
-fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2dBundle::default());
 }

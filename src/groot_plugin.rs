@@ -1,11 +1,14 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::Mutex;
+use std::time::SystemTime;
 
 use bevy::prelude::*;
 use goscript::{HotReloadEngine, Value};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::groot_module::GrootModuleExt;
 
@@ -13,27 +16,31 @@ use crate::groot_module::GrootModuleExt;
 // Components & Resources
 // ---------------------------------------------------------------------------
 
-/// Component driving entity behavior via GoScript. Entities with this
-/// component get `OnUpdate(dt)` called every frame by the execution system.
 #[derive(Component, Clone, Debug)]
-#[allow(dead_code)] // `tag` is metadata for tooling/future query filtering.
+#[allow(dead_code)]
 pub struct GoScriptComponent {
     pub script_path: String,
     pub entity_id: u32,
     pub tag: String,
 }
 
-/// Axis-aligned box collider data for an entity. Declared by scripts as *data*
-/// (via `groot.SetSelfCollider`) and consumed by the host engine — collision
-/// math and debug visualization are the engine's job, never the script's.
-#[derive(Component, Clone, Copy, Debug, Default)]
-pub struct Collider {
-    pub width: f32,
-    pub height: f32,
+#[derive(Component, Clone, Debug)]
+pub struct SourcePrefab(pub String);
+
+#[derive(Component, Clone, Copy, Debug, Deserialize, Serialize)]
+pub enum Collider {
+    None,
+    Box2D { width: f32, height: f32 },
+    Box3D { x: f32, y: f32, z: f32 },
+    Sphere3D { radius: f32 },
 }
 
-/// Toggles host-side debug visualization (collider overlays). Rendering the
-/// overlay is the engine's responsibility; scripts only ever declare data.
+impl Default for Collider {
+    fn default() -> Self {
+        Collider::None
+    }
+}
+
 #[derive(Resource)]
 pub struct DebugRender {
     pub show_colliders: bool,
@@ -47,27 +54,19 @@ impl Default for DebugRender {
     }
 }
 
-/// Identifies a pipe segment by index (position set by `groot.SetPipePosition`).
-#[derive(Component)]
-pub struct PipeIndex(pub usize);
-
-/// Marker for the on-screen score text entity.
-#[derive(Component)]
-pub struct ScoreText;
-
-/// Native ECS transform state, kept as a component so scripts and systems can
-/// read/write a script entity's position/rotation/scale without reaching for
-/// the raw `Transform` across the VM boundary.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct ScriptTransform {
     pub x: f32,
     pub y: f32,
-    pub rotation: f32,
+    pub z: f32,
+    pub pitch: f32,
+    pub yaw: f32,
+    pub roll: f32,
     pub scale_x: f32,
     pub scale_y: f32,
+    pub scale_z: f32,
 }
 
-/// Native ECS sprite color state for script entities.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct ScriptColor(pub Color);
 
@@ -77,24 +76,24 @@ impl Default for ScriptColor {
     }
 }
 
-/// Entity spawn request queued by `groot.SpawnEntity` / `groot.SpawnPrefab`.
 #[derive(Clone, Debug)]
 pub enum SpawnRequest {
     Prefab {
-        name: String,
+        path: String,
         x: f32,
         y: f32,
+        z: f32,
         tag: String,
     },
     Script {
         script: String,
         x: f32,
         y: f32,
+        z: f32,
         tag: String,
     },
 }
 
-/// Custom gameplay event emitted by `groot.EmitEvent`.
 #[derive(Clone, Debug)]
 pub struct ScriptEvent {
     pub name: String,
@@ -102,66 +101,75 @@ pub struct ScriptEvent {
 }
 
 // ---------------------------------------------------------------------------
-// Project config (groot.toml) — data-driven visuals & scene
+// RON Configuration & Prefab Schemas
 // ---------------------------------------------------------------------------
 
-/// Top-level `groot.toml` project configuration. Graphics are *data*, not
-/// Rust: prefabs map a name to a sprite/text visual and an optional behavior
-/// script, and the scene lists the initial entities. No Rust is required to
-/// define what anything looks like.
-#[derive(Clone, Debug, Deserialize, Default, Resource)]
+#[derive(Clone, Debug, Deserialize, Serialize, Resource)]
 pub struct GrootConfig {
-    #[serde(default)]
     pub project: ProjectConfig,
-    #[serde(default)]
     pub window: WindowConfig,
-    #[serde(default, rename = "prefab")]
-    pub prefabs: Vec<PrefabConfig>,
     #[serde(default)]
-    pub scene: SceneConfig,
+    pub render: RenderConfig,
+    pub initial_scene: String,
 }
 
 impl GrootConfig {
-    /// Load `groot.toml` from the given path, falling back to defaults (with a
-    /// warning) if the file is missing or malformed.
     pub fn load(path: &str) -> Self {
-        let raw = match std::fs::read_to_string(path) {
+        let raw = match fs::read_to_string(path) {
             Ok(raw) => raw,
             Err(e) => {
-                bevy::log::warn!("[GROOT CONFIG] no '{path}' ({e}); using defaults");
+                bevy::log::warn!("[GROOT CONFIG] missing '{path}' ({e}); using fallback");
                 return Self::default();
             }
         };
-        match toml::from_str(&raw) {
+        match ron::from_str(&raw) {
             Ok(config) => config,
             Err(e) => {
-                bevy::log::warn!("[GROOT CONFIG] failed to parse '{path}': {e}; using defaults");
+                bevy::log::warn!("[GROOT CONFIG] failed to parse '{path}': {e}; using fallback");
                 Self::default()
             }
         }
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+impl Default for GrootConfig {
+    fn default() -> Self {
+        Self {
+            project: ProjectConfig::default(),
+            window: WindowConfig::default(),
+            render: RenderConfig::default(),
+            initial_scene: "assets/scenes/main.scene.ron".into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ProjectConfig {
-    #[serde(default)]
+    #[serde(default = "default_project_name")]
     pub name: String,
-    #[serde(default)]
+    #[serde(default = "default_version")]
     pub version: String,
+}
+
+fn default_project_name() -> String {
+    "Groot Engine".into()
+}
+fn default_version() -> String {
+    "0.2.0".into()
 }
 
 impl Default for ProjectConfig {
     fn default() -> Self {
         Self {
-            name: "Groot".into(),
-            version: "0.1.0".into(),
+            name: default_project_name(),
+            version: default_version(),
         }
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct WindowConfig {
-    #[serde(default)]
+    #[serde(default = "default_title")]
     pub title: String,
     #[serde(default = "default_width")]
     pub width: f32,
@@ -169,159 +177,255 @@ pub struct WindowConfig {
     pub height: f32,
 }
 
+fn default_title() -> String {
+    "Groot".into()
+}
+fn default_width() -> f32 {
+    1280.0
+}
+fn default_height() -> f32 {
+    720.0
+}
+
 impl Default for WindowConfig {
     fn default() -> Self {
         Self {
-            title: "Groot".into(),
+            title: default_title(),
             width: default_width(),
             height: default_height(),
         }
     }
 }
 
-fn default_width() -> f32 {
-    800.0
-}
-fn default_height() -> f32 {
-    600.0
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RenderConfig {
+    #[serde(default = "default_clear_color")]
+    pub clear_color: RgbaColor,
 }
 
-/// A named visual/behavior template. `kind` selects special host components:
-/// `"pipe"` spawns a sprite tagged with `PipeIndex`, `"score"` spawns the HUD
-/// text entity. Anything else spawns a plain sprite (optionally script-driven).
-#[derive(Clone, Debug, Deserialize)]
+fn default_clear_color() -> RgbaColor {
+    RgbaColor::Rgba(0.1, 0.1, 0.12, 1.0)
+}
+
+impl Default for RenderConfig {
+    fn default() -> Self {
+        Self {
+            clear_color: default_clear_color(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum RgbaColor {
+    Rgba(f32, f32, f32, f32),
+    Rgb(f32, f32, f32),
+}
+
+impl RgbaColor {
+    pub fn to_color(&self) -> Color {
+        match *self {
+            RgbaColor::Rgba(r, g, b, a) => Color::rgba(r, g, b, a),
+            RgbaColor::Rgb(r, g, b) => Color::rgb(r, g, b),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct TransformConfig {
+    #[serde(default)]
+    pub position: (f32, f32, f32),
+    #[serde(default)]
+    pub rotation: (f32, f32, f32),
+    #[serde(default = "default_scale")]
+    pub scale: (f32, f32, f32),
+}
+
+fn default_scale() -> (f32, f32, f32) {
+    (1.0, 1.0, 1.0)
+}
+
+impl Default for TransformConfig {
+    fn default() -> Self {
+        Self {
+            position: (0.0, 0.0, 0.0),
+            rotation: (0.0, 0.0, 0.0),
+            scale: default_scale(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum VisualConfig {
+    Sprite {
+        size: (f32, f32),
+        color: RgbaColor,
+    },
+    Text {
+        value: String,
+        size: f32,
+        color: RgbaColor,
+    },
+    MeshPbr {
+        shape: ShapeConfig,
+        material: MaterialConfig,
+    },
+    Light(LightConfig),
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum ShapeConfig {
+    Cuboid { x: f32, y: f32, z: f32 },
+    Sphere { radius: f32 },
+    Cylinder { radius: f32, height: f32 },
+    Plane { size_x: f32, size_z: f32 },
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct MaterialConfig {
+    pub color: RgbaColor,
+    #[serde(default = "default_roughness")]
+    pub roughness: f32,
+    #[serde(default = "default_metallic")]
+    pub metallic: f32,
+}
+
+fn default_roughness() -> f32 {
+    0.5
+}
+fn default_metallic() -> f32 {
+    0.0
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum LightConfig {
+    Point {
+        color: RgbaColor,
+        intensity: f32,
+        range: f32,
+        shadows_enabled: bool,
+    },
+    Directional {
+        color: RgbaColor,
+        illuminance: f32,
+        shadows_enabled: bool,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PrefabConfig {
     pub name: String,
     #[serde(default)]
     pub script: Option<String>,
     #[serde(default)]
-    pub sprite: Option<SpriteConfig>,
+    pub transform: TransformConfig,
     #[serde(default)]
-    pub text: Option<TextConfig>,
+    pub visual: Option<VisualConfig>,
     #[serde(default)]
-    pub kind: Option<String>,
-    /// Optional collider box (`[width, height]`) attached to script entities.
+    pub collider: Option<Collider>,
     #[serde(default)]
-    pub size: Option<[f32; 2]>,
-    #[serde(default)]
-    pub z: Option<f32>,
+    pub children: Vec<PrefabConfig>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-pub struct SpriteConfig {
-    #[serde(default = "default_sprite_size")]
-    pub size: [f32; 2],
-    #[serde(default = "default_color")]
-    pub color: [f32; 4],
+impl PrefabConfig {
+    pub fn load(path: &str) -> Option<Self> {
+        let raw = fs::read_to_string(path).ok()?;
+        ron::from_str(&raw).ok()
+    }
 }
 
-fn default_sprite_size() -> [f32; 2] {
-    [32.0, 32.0]
-}
-fn default_color() -> [f32; 4] {
-    [1.0, 1.0, 1.0, 1.0]
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct TextConfig {
-    #[serde(default)]
-    pub value: String,
-    #[serde(default = "default_font_size")]
-    pub size: f32,
-    #[serde(default = "default_color")]
-    pub color: [f32; 4],
-    #[serde(default)]
-    pub z: f32,
-}
-
-fn default_font_size() -> f32 {
-    28.0
-}
-
-/// Initial entities listed under `[[scene.entity]]`.
-#[derive(Clone, Debug, Deserialize, Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct SceneConfig {
-    #[serde(default, rename = "entity")]
+    pub name: String,
+    #[serde(default)]
+    pub environment: EnvironmentConfig,
+    #[serde(default)]
     pub entities: Vec<SceneEntityConfig>,
 }
 
-#[derive(Clone, Debug, Deserialize, Default)]
+impl SceneConfig {
+    pub fn load(path: &str) -> Self {
+        let raw = match fs::read_to_string(path) {
+            Ok(raw) => raw,
+            Err(e) => {
+                bevy::log::warn!("[GROOT SCENE] cannot read '{path}': {e}");
+                return Self::default();
+            }
+        };
+        ron::from_str(&raw).unwrap_or_default()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
+pub struct EnvironmentConfig {
+    pub ambient_light: Option<AmbientLightConfig>,
+    pub camera: Option<CameraConfig>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AmbientLightConfig {
+    pub color: RgbaColor,
+    pub brightness: f32,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum CameraConfig {
+    Perspective3D {
+        fov: f32,
+        position: (f32, f32, f32),
+        look_at: (f32, f32, f32),
+    },
+    Orthographic2D,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SceneEntityConfig {
     pub prefab: String,
     #[serde(default)]
-    pub x: f32,
-    #[serde(default)]
-    pub y: f32,
-    #[serde(default)]
-    pub z: Option<f32>,
-    #[serde(default)]
     pub entity_id: Option<u32>,
     #[serde(default)]
-    pub pipe_index: Option<usize>,
-    #[serde(default)]
     pub tag: String,
+    #[serde(default)]
+    pub transform_override: Option<TransformOverride>,
 }
 
-/// Per-entity runtime state. This lives in a thread-local scratch slot for the
-/// *currently executing* script entity rather than in a global map, so host
-/// bindings (`groot.GetSelf*` / `groot.SetSelf*`) read and write the live
-/// entity without locking a process-wide `Mutex<HashMap>`. The execution
-/// system syncs it to/from the entity's Bevy `Transform`/`Sprite` components.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct TransformOverride {
+    pub position: Option<(f32, f32, f32)>,
+    pub rotation: Option<(f32, f32, f32)>,
+    pub scale: Option<(f32, f32, f32)>,
+}
+
+// ---------------------------------------------------------------------------
+// Thread-Local State & Mutex Queues
+// ---------------------------------------------------------------------------
+
 #[derive(Debug, Clone, Copy, Default)]
 struct EntityState {
     x: f32,
     y: f32,
-    rotation: f32,
+    z: f32,
+    pitch: f32,
+    yaw: f32,
+    roll: f32,
     scale_x: f32,
     scale_y: f32,
+    scale_z: f32,
     color: (f32, f32, f32, f32),
-    collider_w: f32,
-    collider_h: f32,
+    collider: Collider,
     destroy_requested: bool,
 }
 
-/// Flappy-style game writes queued by scripts and applied to tagged Bevy
-/// entities by the execution system within the same frame.
-#[derive(Debug, Clone, Copy)]
-enum GameWrite {
-    PipePosition(usize, f32, f32, f32),
-    ScoreDisplay(i32, i32),
-}
-
-// ---------------------------------------------------------------------------
-// Thread-local script context
-// ---------------------------------------------------------------------------
-
-// The script entity currently being executed. Set before each `OnUpdate` so
-// the `groot.GetSelf*` / `groot.SetSelf*` bindings target the right entity.
 thread_local! {
     static CURRENT_ENTITY: Cell<u32> = const { Cell::new(0) };
     static CURRENT_STATE: RefCell<EntityState> = RefCell::new(EntityState::default());
-
-    // Frame snapshot of every scripted entity's position, rebuilt each frame
-    // from ECS components so `groot.GetEntityPosition`/`groot.GetDistance` can
-    // resolve sibling entities without a persistent global state map.
-    static ENTITY_POSITIONS: RefCell<HashMap<u32, (f32, f32)>> = RefCell::new(HashMap::new());
-
-    // Game-state writes queued by `groot.SetPipePosition`/`groot.SetScoreDisplay`
-    // during the VM call and applied by the same system right after it returns.
-    static GAME_WRITES: RefCell<Vec<GameWrite>> = const { RefCell::new(Vec::new()) };
+    static ENTITY_POSITIONS: RefCell<HashMap<u32, (f32, f32, f32)>> = RefCell::new(HashMap::new());
 }
 
-// ---------------------------------------------------------------------------
-// Cross-boundary command queues (script VM -> Bevy systems)
-// ---------------------------------------------------------------------------
-
-// These are intentionally kept as process-wide `static Mutex` buffers: scripts
-// run inside the execution system but spawn requests / events are drained by
-// *other* systems in the schedule, and Bevy may schedule those on a different
-// worker thread. Entity *state* never uses these — it flows through ECS
-// components and the thread-local scratch above.
 static SPAWN_REQUESTS: Mutex<Vec<SpawnRequest>> = Mutex::new(Vec::new());
 static SCRIPT_EVENTS: Mutex<Vec<ScriptEvent>> = Mutex::new(Vec::new());
 
 // ---------------------------------------------------------------------------
-// Shared input state
+// Shared Input & Script Host
 // ---------------------------------------------------------------------------
 
 struct InputState {
@@ -334,13 +438,10 @@ struct InputState {
     mouse_button_pressed: Cell<[bool; 3]>,
 }
 
-// ---------------------------------------------------------------------------
-// GrootScriptHost — one engine per script file, shared across entities
-// ---------------------------------------------------------------------------
-
 pub struct GrootScriptHost {
     engines: HashMap<String, HotReloadEngine>,
     input: Rc<InputState>,
+    mtime_cache: HashMap<String, SystemTime>,
 }
 
 impl GrootScriptHost {
@@ -356,6 +457,7 @@ impl GrootScriptHost {
                 mouse_button_down: Cell::new([false; 3]),
                 mouse_button_pressed: Cell::new([false; 3]),
             }),
+            mtime_cache: HashMap::new(),
         }
     }
 
@@ -366,10 +468,8 @@ impl GrootScriptHost {
                 let mut engine = HotReloadEngine::new(script_path);
                 let vm = &mut engine.vm;
 
-                // 1. Stateless utilities (math, collision, logging)
                 vm.register_groot_module();
 
-                // 2. Input API
                 let inp_axis = Rc::clone(&self.input);
                 vm.register_fn("groot.GetAxis", move |args| {
                     if let Some(Value::String(axis)) = args.first() {
@@ -421,9 +521,6 @@ impl GrootScriptHost {
                     Value::Bool(inp_mpressed.mouse_button_pressed.get()[btn.min(2)])
                 });
 
-                // 3. Self-context API. Reads/writes the thread-local scratch of
-                // the currently executing entity; the execution system syncs it
-                // to/from the entity's Bevy components around each OnUpdate.
                 vm.register_fn("groot.GetSelfEntity", |_| {
                     let id = CURRENT_ENTITY.with(|c| c.get());
                     Value::Int(id as i64)
@@ -434,28 +531,46 @@ impl GrootScriptHost {
                     Value::Slice(Rc::new(RefCell::new(vec![
                         Value::Float(s.x as f64),
                         Value::Float(s.y as f64),
+                        Value::Float(s.z as f64),
                     ])))
                 });
 
                 vm.register_fn("groot.SetSelfPosition", |args| {
                     let nx = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
                     let ny = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    let nz = args.get(2).and_then(|v| v.as_number());
                     CURRENT_STATE.with(|st| {
                         let mut s = st.borrow_mut();
                         s.x = nx;
                         s.y = ny;
+                        if let Some(z) = nz {
+                            s.z = z as f32;
+                        }
                     });
                     Value::Nil
                 });
 
                 vm.register_fn("groot.GetSelfRotation", |_| {
                     let s = CURRENT_STATE.with(|st| *st.borrow());
-                    Value::Float(s.rotation as f64)
+                    Value::Float(s.yaw as f64)
                 });
 
                 vm.register_fn("groot.SetSelfRotation", |args| {
                     let rot = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    CURRENT_STATE.with(|st| st.borrow_mut().rotation = rot);
+                    CURRENT_STATE.with(|st| st.borrow_mut().yaw = rot);
+                    Value::Nil
+                });
+
+                vm.register_fn("groot.SetSelfRotation3D", |args| {
+                    let p = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    let y = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    let r = args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    CURRENT_STATE.with(|st| {
+                        let mut s = st.borrow_mut();
+                        s.pitch = p;
+                        s.yaw = y;
+                        s.roll = r;
+                    });
                     Value::Nil
                 });
 
@@ -464,16 +579,19 @@ impl GrootScriptHost {
                     Value::Slice(Rc::new(RefCell::new(vec![
                         Value::Float(s.scale_x as f64),
                         Value::Float(s.scale_y as f64),
+                        Value::Float(s.scale_z as f64),
                     ])))
                 });
 
                 vm.register_fn("groot.SetSelfScale", |args| {
                     let sx = args.first().and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
                     let sy = args.get(1).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
+                    let sz = args.get(2).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
                     CURRENT_STATE.with(|st| {
                         let mut s = st.borrow_mut();
                         s.scale_x = sx;
                         s.scale_y = sy;
+                        s.scale_z = sz;
                     });
                     Value::Nil
                 });
@@ -487,16 +605,25 @@ impl GrootScriptHost {
                     Value::Nil
                 });
 
-                // Collider *data* declaration. The host engine owns collision
-                // math and any debug visualization; the script only says "my
-                // hitbox is w x h" and the engine draws/uses it.
+                vm.register_fn("groot.SetSelfMaterialColor", |args| {
+                    let r = args.first().and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
+                    let g = args.get(1).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
+                    let b = args.get(2).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
+                    let a = args.get(3).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
+                    CURRENT_STATE.with(|st| st.borrow_mut().color = (r, g, b, a));
+                    Value::Nil
+                });
+
                 vm.register_fn("groot.SetSelfCollider", |args| {
                     let w = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
                     let h = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    let z = args.get(2).and_then(|v| v.as_number());
                     CURRENT_STATE.with(|st| {
                         let mut s = st.borrow_mut();
-                        s.collider_w = w;
-                        s.collider_h = h;
+                        s.collider = match z {
+                            Some(d) => Collider::Box3D { x: w, y: h, z: d as f32 },
+                            None => Collider::Box2D { width: w, height: h },
+                        };
                     });
                     Value::Nil
                 });
@@ -506,15 +633,15 @@ impl GrootScriptHost {
                     Value::Nil
                 });
 
-                // 4. Entity queries — resolved against the per-frame snapshot.
                 vm.register_fn("groot.GetEntityPosition", |args| {
                     let tid = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as u32;
                     let pos = ENTITY_POSITIONS
                         .with(|p| p.borrow().get(&tid).copied())
-                        .unwrap_or((0.0, 0.0));
+                        .unwrap_or((0.0, 0.0, 0.0));
                     Value::Slice(Rc::new(RefCell::new(vec![
                         Value::Float(pos.0 as f64),
                         Value::Float(pos.1 as f64),
+                        Value::Float(pos.2 as f64),
                     ])))
                 });
 
@@ -524,49 +651,36 @@ impl GrootScriptHost {
                     let (p1, p2) = ENTITY_POSITIONS.with(|p| {
                         let map = p.borrow();
                         (
-                            map.get(&id1).copied().unwrap_or((0.0, 0.0)),
-                            map.get(&id2).copied().unwrap_or((0.0, 0.0)),
+                            map.get(&id1).copied().unwrap_or((0.0, 0.0, 0.0)),
+                            map.get(&id2).copied().unwrap_or((0.0, 0.0, 0.0)),
                         )
                     });
                     let dx = p2.0 - p1.0;
                     let dy = p2.1 - p1.1;
-                    Value::Float((dx * dx + dy * dy).sqrt() as f64)
+                    let dz = p2.2 - p1.2;
+                    Value::Float(((dx * dx + dy * dy + dz * dz) as f64).sqrt())
                 });
 
-                // 6. Commands & Events
                 vm.register_fn("groot.SpawnEntity", |args| {
-                    let script = args
-                        .first()
-                        .and_then(|v| v.as_string())
-                        .unwrap_or("")
-                        .to_string();
+                    let script = args.first().and_then(|v| v.as_string()).unwrap_or("").to_string();
                     let x = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
                     let y = args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let tag = args.get(3).and_then(|v| v.as_string()).unwrap_or("").to_string();
+                    let z = args.get(3).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    let tag = args.get(4).and_then(|v| v.as_string()).unwrap_or("").to_string();
                     if let Ok(mut reqs) = SPAWN_REQUESTS.lock() {
-                        reqs.push(SpawnRequest::Script { script, x, y, tag });
+                        reqs.push(SpawnRequest::Script { script, x, y, z, tag });
                     }
                     Value::Nil
                 });
 
                 vm.register_fn("groot.SpawnPrefab", |args| {
-                    let name = args
-                        .first()
-                        .and_then(|v| v.as_string())
-                        .unwrap_or("")
-                        .to_string();
+                    let path = args.first().and_then(|v| v.as_string()).unwrap_or("").to_string();
                     let x = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
                     let y = args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let tag = args.get(3).and_then(|v| v.as_string()).unwrap_or("").to_string();
+                    let z = args.get(3).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    let tag = args.get(4).and_then(|v| v.as_string()).unwrap_or("").to_string();
                     if let Ok(mut reqs) = SPAWN_REQUESTS.lock() {
-                        reqs.push(SpawnRequest::Prefab { name, x, y, tag });
-                    }
-                    Value::Nil
-                });
-
-                vm.register_fn("groot.PlaySound", |args| {
-                    if let Some(name) = args.first().and_then(|v| v.as_string()) {
-                        bevy::log::info!("[GROOT AUDIO]: Playing sound '{name}'");
+                        reqs.push(SpawnRequest::Prefab { path, x, y, z, tag });
                     }
                     Value::Nil
                 });
@@ -583,30 +697,7 @@ impl GrootScriptHost {
                     Value::Nil
                 });
 
-                // 7. Flappy-style game writes (routed to tagged ECS entities).
-                vm.register_fn("groot.SetPipePosition", |args| {
-                    let idx = args
-                        .first()
-                        .and_then(|v| v.as_number())
-                        .unwrap_or(0.0) as usize;
-                    let x = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let gap_y = args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let gap_size = args.get(3).and_then(|v| v.as_number()).unwrap_or(130.0) as f32;
-                    GAME_WRITES.with(|w| w.borrow_mut().push(GameWrite::PipePosition(idx, x, gap_y, gap_size)));
-                    Value::Nil
-                });
-
-                vm.register_fn("groot.SetScoreDisplay", |args| {
-                    let score = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as i32;
-                    let high = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as i32;
-                    GAME_WRITES.with(|w| w.borrow_mut().push(GameWrite::ScoreDisplay(score, high)));
-                    Value::Nil
-                });
-
-                // Compile the script immediately so OnUpdate is defined on
-                // the first frame (before script_hot_reload_system runs).
                 let _ = engine.reload_if_changed();
-
                 engine
             })
     }
@@ -639,6 +730,7 @@ impl Plugin for GrootPlugin {
                 Update,
                 (
                     script_hot_reload_system,
+                    ron_hot_reload_system,
                     script_input_sync_system,
                     script_execution_system,
                     handle_spawn_requests_system,
@@ -654,18 +746,42 @@ impl Plugin for GrootPlugin {
 // Systems
 // ---------------------------------------------------------------------------
 
-/// Recompile scripts whose source files changed on disk.
 fn script_hot_reload_system(mut host: NonSendMut<GrootScriptHost>) {
     host.reload_all();
 }
 
-/// Refresh the input snapshot the script bindings read from, once per frame.
+fn ron_hot_reload_system(
+    mut host: NonSendMut<GrootScriptHost>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    query: Query<(Entity, &SourcePrefab)>,
+) {
+    for (entity, source) in &query {
+        let path = Path::new(&source.0);
+        if !path.exists() {
+            continue;
+        }
+        if let Ok(meta) = fs::metadata(path) {
+            if let Ok(mtime) = meta.modified() {
+                let cached = host.mtime_cache.get(&source.0).copied();
+                if cached.map_or(true, |c| mtime > c) {
+                    host.mtime_cache.insert(source.0.clone(), mtime);
+                    if let Some(prefab) = PrefabConfig::load(&source.0) {
+                        bevy::log::info!("[GROOT RON] Live-reloading prefab asset '{}'", source.0);
+                        commands.entity(entity).despawn_descendants();
+                        update_entity_visuals(&mut commands, entity, &prefab, &mut meshes, &mut materials);
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn script_input_sync_system(
     host: NonSendMut<GrootScriptHost>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mouse_input: Res<ButtonInput<MouseButton>>,
-    windows: Query<&Window>,
-    camera_q: Query<(&Camera, &GlobalTransform)>,
 ) {
     let inp = &host.input;
 
@@ -710,16 +826,6 @@ fn script_input_sync_system(
         }
     }
 
-    if let Ok(window) = windows.get_single() {
-        if let Some(cursor) = window.cursor_position() {
-            if let Ok((camera, cam_tf)) = camera_q.get_single() {
-                if let Some(world) = camera.viewport_to_world_2d(cam_tf, cursor) {
-                    inp.mouse_pos.set((world.x as f64, world.y as f64));
-                }
-            }
-        }
-    }
-
     inp.mouse_button_down.set([
         mouse_input.pressed(MouseButton::Left),
         mouse_input.pressed(MouseButton::Right),
@@ -732,8 +838,6 @@ fn script_input_sync_system(
     ]);
 }
 
-/// Query for entities driven by a GoScript file (the ones that receive
-/// `OnUpdate` and whose self-state is synced each frame).
 type ScriptEntityQuery<'w, 's> = Query<
     'w,
     's,
@@ -742,74 +846,65 @@ type ScriptEntityQuery<'w, 's> = Query<
         &'static GoScriptComponent,
         &'static mut Transform,
         Option<&'static mut Sprite>,
+        Option<&'static Handle<StandardMaterial>>,
         &'static mut ScriptTransform,
         &'static mut ScriptColor,
         Option<&'static mut Collider>,
     ),
 >;
 
-/// Query for script-positioned pipe sprites (no script component of their own).
-type PipeEntityQuery<'w, 's> = Query<
-    'w,
-    's,
-    (&'static mut Transform, &'static PipeIndex),
-    (Without<GoScriptComponent>, Without<ScoreText>),
->;
-
-/// Query for the score text entity updated by `groot.SetScoreDisplay`.
-type ScoreTextQuery<'w, 's> = Query<
-    'w,
-    's,
-    &'static mut Text,
-    (With<ScoreText>, Without<GoScriptComponent>),
->;
-
-/// Run `OnUpdate(dt)` for every script entity. The self-context bindings read
-/// and write the thread-local [`EntityState`] scratch, which this system syncs
-/// to/from the entity's `Transform`/`Sprite` components — so ECS components
-/// remain the source of truth and no global state map is needed.
 fn script_execution_system(
     mut host: NonSendMut<GrootScriptHost>,
     time: Res<Time>,
     mut commands: Commands,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     mut script_query: ScriptEntityQuery,
-    mut pipe_query: PipeEntityQuery,
-    mut score_query: ScoreTextQuery,
 ) {
     let dt = time.delta_seconds() as f64;
 
-    // 1. Snapshot every scripted entity's position from ECS components so
-    //    `groot.GetEntityPosition` / `groot.GetDistance` can resolve siblings.
     ENTITY_POSITIONS.with(|snapshot| {
         let mut map = snapshot.borrow_mut();
         map.clear();
         for (_, comp, transform, ..) in &script_query {
-            map.insert(comp.entity_id, (transform.translation.x, transform.translation.y));
+            map.insert(
+                comp.entity_id,
+                (
+                    transform.translation.x,
+                    transform.translation.y,
+                    transform.translation.z,
+                ),
+            );
         }
     });
 
-    // 2. Tick each entity's script.
-    for (entity, comp, mut transform, sprite, mut script_tf, mut script_color, collider) in
+    for (entity, comp, mut transform, sprite, mat_handle, mut script_tf, mut script_color, collider) in
         &mut script_query
     {
         CURRENT_ENTITY.with(|c| c.set(comp.entity_id));
 
-        // Sync ECS -> scratch so GetSelf* reflects the live entity.
         CURRENT_STATE.with(|st| {
             let mut s = st.borrow_mut();
             s.x = transform.translation.x;
             s.y = transform.translation.y;
-            let (_, _, rot) = transform.rotation.to_euler(EulerRot::XYZ);
-            s.rotation = rot;
+            s.z = transform.translation.z;
+            let (p, y, r) = transform.rotation.to_euler(EulerRot::YXZ);
+            s.pitch = p.to_degrees();
+            s.yaw = y.to_degrees();
+            s.roll = r.to_degrees();
             s.scale_x = transform.scale.x;
             s.scale_y = transform.scale.y;
+            s.scale_z = transform.scale.z;
             if let Some(sprite) = &sprite {
                 let c = sprite.color;
                 s.color = (c.r(), c.g(), c.b(), c.a());
+            } else if let Some(mat_h) = mat_handle {
+                if let Some(mat) = materials.get(mat_h) {
+                    let c = mat.base_color;
+                    s.color = (c.r(), c.g(), c.b(), c.a());
+                }
             }
             if let Some(collider) = &collider {
-                s.collider_w = collider.width;
-                s.collider_h = collider.height;
+                s.collider = **collider;
             }
             s.destroy_requested = false;
         });
@@ -820,9 +915,6 @@ fn script_execution_system(
             bevy::log::error!("[GROOT SCRIPT ERROR] entity #{}: {e}", comp.entity_id);
         }
 
-        // Sync scratch -> ECS components (the source of truth), mirror the
-        // result into ScriptTransform/ScriptColor/Collider for component
-        // readers, and despawn entities that asked to die.
         CURRENT_STATE.with(|st| {
             let s = st.borrow();
             if s.destroy_requested {
@@ -831,223 +923,307 @@ fn script_execution_system(
             } else {
                 transform.translation.x = s.x;
                 transform.translation.y = s.y;
-                transform.rotation = Quat::from_rotation_z(s.rotation);
-                transform.scale = Vec3::new(s.scale_x, s.scale_y, 1.0);
+                transform.translation.z = s.z;
+                transform.rotation = Quat::from_euler(
+                    EulerRot::YXZ,
+                    s.yaw.to_radians(),
+                    s.pitch.to_radians(),
+                    s.roll.to_radians(),
+                );
+                transform.scale = Vec3::new(s.scale_x, s.scale_y, s.scale_z);
+
+                let color = Color::rgba(s.color.0, s.color.1, s.color.2, s.color.3);
                 if let Some(mut sprite) = sprite {
-                    sprite.color =
-                        Color::rgba(s.color.0, s.color.1, s.color.2, s.color.3);
+                    sprite.color = color;
+                }
+                if let Some(mat_h) = mat_handle {
+                    if let Some(mat) = materials.get_mut(mat_h) {
+                        mat.base_color = color;
+                    }
                 }
 
                 script_tf.x = s.x;
                 script_tf.y = s.y;
-                script_tf.rotation = s.rotation;
+                script_tf.z = s.z;
+                script_tf.pitch = s.pitch;
+                script_tf.yaw = s.yaw;
+                script_tf.roll = s.roll;
                 script_tf.scale_x = s.scale_x;
                 script_tf.scale_y = s.scale_y;
-                script_color.0 = Color::rgba(s.color.0, s.color.1, s.color.2, s.color.3);
+                script_tf.scale_z = s.scale_z;
+                script_color.0 = color;
                 if let Some(mut collider) = collider {
-                    collider.width = s.collider_w;
-                    collider.height = s.collider_h;
+                    *collider = s.collider;
                 }
             }
         });
     }
-
-    // 3. Apply game-state writes queued by scripts to tagged ECS entities.
-    GAME_WRITES.with(|writes| {
-        for write in writes.borrow_mut().drain(..) {
-            match write {
-                GameWrite::PipePosition(idx, x, gap_y, gap_size) => {
-                    let half_gap = gap_size / 2.0;
-                    let sprite_height = 400.0;
-                    for (mut transform, pipe_idx) in &mut pipe_query {
-                        if pipe_idx.0 != idx {
-                            continue;
-                        }
-                        transform.translation.x = x;
-                        // Even index = top pipe (above the gap); odd = bottom.
-                        transform.translation.y = if pipe_idx.0 % 2 == 0 {
-                            gap_y + half_gap + sprite_height / 2.0
-                        } else {
-                            gap_y - half_gap - sprite_height / 2.0
-                        };
-                    }
-                }
-                GameWrite::ScoreDisplay(score, high) => {
-                    for mut text in &mut score_query {
-                        if let Some(section) = text.sections.first_mut() {
-                            section.value = format!("Score: {score}  Best: {high}");
-                        }
-                    }
-                }
-            }
-        }
-    });
 }
 
-/// Placement + identity for an entity spawned from a prefab.
-struct PrefabPlacement<'a> {
-    name: &'a str,
-    x: f32,
-    y: f32,
-    z: f32,
-    entity_id: Option<u32>,
-    pipe_index: Option<usize>,
-    tag: &'a str,
-}
-
-/// Spawn the initial scene entities listed under `[[scene.entity]]` in
-/// `groot.toml`. Visuals come entirely from prefab data — no Rust required.
-fn spawn_scene_system(mut commands: Commands, config: Option<Res<GrootConfig>>) {
+fn spawn_scene_system(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    config: Option<Res<GrootConfig>>,
+) {
     let Some(config) = config else { return };
+    let scene = SceneConfig::load(&config.initial_scene);
     bevy::log::info!(
-        "[GROOT] {} v{} — spawning {} scene entities",
-        config.project.name,
-        config.project.version,
-        config.scene.entities.len()
+        "[GROOT] Spawning scene '{}' ({} entities)",
+        scene.name,
+        scene.entities.len()
     );
-    for entity_cfg in &config.scene.entities {
-        spawn_prefab_entity(
-            &mut commands,
-            &config.prefabs,
-            PrefabPlacement {
-                name: &entity_cfg.prefab,
-                x: entity_cfg.x,
-                y: entity_cfg.y,
-                z: entity_cfg
-                    .z
-                    .or_else(|| prefab_z(&config.prefabs, &entity_cfg.prefab))
-                    .unwrap_or(0.0),
-                entity_id: entity_cfg.entity_id,
-                pipe_index: entity_cfg.pipe_index,
-                tag: &entity_cfg.tag,
-            },
-        );
+
+    if let Some(ambient) = &scene.environment.ambient_light {
+        commands.insert_resource(AmbientLight {
+            color: ambient.color.to_color(),
+            brightness: ambient.brightness,
+        });
     }
-}
 
-fn prefab_z(prefabs: &[PrefabConfig], name: &str) -> Option<f32> {
-    prefabs.iter().find(|p| p.name == name).and_then(|p| p.z)
-}
-
-/// Look up a prefab by name and spawn its visual (and optional behavior) as an
-/// ECS entity. Returns `false` if the prefab name is unknown.
-fn spawn_prefab_entity(
-    commands: &mut Commands,
-    prefabs: &[PrefabConfig],
-    p: PrefabPlacement<'_>,
-) -> bool {
-    let PrefabPlacement {
-        name,
-        x,
-        y,
-        z,
-        entity_id,
-        pipe_index,
-        tag,
-    } = p;
-    let Some(prefab) = prefabs.iter().find(|pr| pr.name == name) else {
-        bevy::log::warn!("[GROOT SPAWN] unknown prefab '{name}'");
-        return false;
-    };
-
-    match prefab.kind.as_deref() {
-        Some("pipe") => {
-            let Some(idx) = pipe_index else {
-                bevy::log::warn!("[GROOT SPAWN] prefab '{name}' (pipe) needs a pipe_index");
-                return false;
-            };
-            let sprite_cfg = prefab.sprite.as_ref();
-            let size = sprite_cfg.map(|s| s.size).unwrap_or([52.0, 400.0]);
-            let color = sprite_cfg.map(|s| s.color).unwrap_or(default_color());
-            commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
-                        color: rgba(color),
-                        custom_size: Some(Vec2::new(size[0], size[1])),
+    if let Some(camera) = &scene.environment.camera {
+        match camera {
+            CameraConfig::Perspective3D { fov, position, look_at } => {
+                let pos = Vec3::new(position.0, position.1, position.2);
+                let target = Vec3::new(look_at.0, look_at.1, look_at.2);
+                commands.spawn(Camera3dBundle {
+                    transform: Transform::from_translation(pos).looking_at(target, Vec3::Y),
+                    projection: PerspectiveProjection {
+                        fov: fov.to_radians(),
                         ..default()
-                    },
-                    transform: Transform::from_xyz(x, y, z),
+                    }
+                    .into(),
                     ..default()
-                },
-                PipeIndex(idx),
-            ));
-            true
-        }
-        Some("score") => {
-            let text_cfg = prefab.text.as_ref();
-            commands.spawn((
-                Text2dBundle {
-                    text: Text::from_section(
-                        text_cfg.map(|t| t.value.as_str()).unwrap_or(""),
-                        TextStyle {
-                            font_size: text_cfg.map(|t| t.size).unwrap_or(default_font_size()),
-                            color: rgba(text_cfg.map(|t| t.color).unwrap_or(default_color())),
-                            ..default()
-                        },
-                    )
-                    .with_justify(JustifyText::Center),
-                    transform: Transform::from_xyz(
-                        x,
-                        y,
-                        text_cfg.map(|t| t.z).unwrap_or(0.0),
-                    ),
-                    ..default()
-                },
-                ScoreText,
-            ));
-            true
-        }
-        _ => {
-            let id = entity_id.unwrap_or_else(rand_entity_id);
-            let sprite_cfg = prefab.sprite.as_ref();
-            let size = sprite_cfg.map(|s| s.size).unwrap_or(default_sprite_size());
-            let color = sprite_cfg.map(|s| s.color).unwrap_or(default_color());
-            let collider_size = prefab.size.unwrap_or([0.0, 0.0]);
-
-            let mut bundle = commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
-                        color: rgba(color),
-                        custom_size: Some(Vec2::new(size[0], size[1])),
-                        ..default()
-                    },
-                    transform: Transform::from_xyz(x, y, z),
-                    ..default()
-                },
-                ScriptTransform {
-                    x,
-                    y,
-                    ..default()
-                },
-                ScriptColor(rgba(color)),
-                Collider {
-                    width: collider_size[0],
-                    height: collider_size[1],
-                },
-            ));
-
-            if let Some(script) = &prefab.script {
-                bundle.insert(GoScriptComponent {
-                    script_path: script.clone(),
-                    entity_id: id,
-                    tag: tag.to_string(),
                 });
             }
-            true
+            CameraConfig::Orthographic2D => {
+                commands.spawn(Camera2dBundle::default());
+            }
+        }
+    } else {
+        commands.spawn(Camera3dBundle {
+            transform: Transform::from_xyz(0.0, 8.0, 14.0).looking_at(Vec3::ZERO, Vec3::Y),
+            ..default()
+        });
+    }
+
+    for entity_cfg in &scene.entities {
+        if let Some(prefab) = PrefabConfig::load(&entity_cfg.prefab) {
+            spawn_prefab_tree(
+                &mut commands,
+                &mut meshes,
+                &mut materials,
+                &prefab,
+                &entity_cfg.prefab,
+                entity_cfg.entity_id,
+                &entity_cfg.tag,
+                entity_cfg.transform_override.as_ref(),
+            );
+        } else {
+            bevy::log::warn!("[GROOT SCENE] Missing prefab asset '{}'", entity_cfg.prefab);
         }
     }
 }
 
-fn rgba([r, g, b, a]: [f32; 4]) -> Color {
-    Color::rgba(r, g, b, a)
+fn spawn_prefab_tree(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+    prefab: &PrefabConfig,
+    prefab_path: &str,
+    override_id: Option<u32>,
+    tag: &str,
+    tf_override: Option<&TransformOverride>,
+) -> Entity {
+    let mut pos = Vec3::new(
+        prefab.transform.position.0,
+        prefab.transform.position.1,
+        prefab.transform.position.2,
+    );
+    let mut rot = Vec3::new(
+        prefab.transform.rotation.0,
+        prefab.transform.rotation.1,
+        prefab.transform.rotation.2,
+    );
+    let mut scale = Vec3::new(
+        prefab.transform.scale.0,
+        prefab.transform.scale.1,
+        prefab.transform.scale.2,
+    );
+
+    if let Some(ov) = tf_override {
+        if let Some(p) = ov.position {
+            pos = Vec3::new(p.0, p.1, p.2);
+        }
+        if let Some(r) = ov.rotation {
+            rot = Vec3::new(r.0, r.1, r.2);
+        }
+        if let Some(s) = ov.scale {
+            scale = Vec3::new(s.0, s.1, s.2);
+        }
+    }
+
+    let transform = Transform {
+        translation: pos,
+        rotation: Quat::from_euler(
+            EulerRot::YXZ,
+            rot.y.to_radians(),
+            rot.x.to_radians(),
+            rot.z.to_radians(),
+        ),
+        scale,
+    };
+
+    let id = override_id.unwrap_or_else(rand_entity_id);
+    let collider = prefab.collider.unwrap_or_default();
+
+    let mut entity_builder = commands.spawn((
+        SpatialBundle {
+            transform,
+            ..default()
+        },
+        SourcePrefab(prefab_path.to_string()),
+        ScriptTransform {
+            x: pos.x,
+            y: pos.y,
+            z: pos.z,
+            pitch: rot.x,
+            yaw: rot.y,
+            roll: rot.z,
+            scale_x: scale.x,
+            scale_y: scale.y,
+            scale_z: scale.z,
+        },
+        ScriptColor::default(),
+        collider,
+    ));
+
+    if let Some(script) = &prefab.script {
+        entity_builder.insert(GoScriptComponent {
+            script_path: script.clone(),
+            entity_id: id,
+            tag: tag.to_string(),
+        });
+    }
+
+    let parent_entity = entity_builder.id();
+
+    attach_visual_components(commands, parent_entity, prefab, meshes, materials);
+
+    for child_cfg in &prefab.children {
+        let child_entity = spawn_prefab_tree(
+            commands,
+            meshes,
+            materials,
+            child_cfg,
+            "",
+            None,
+            "",
+            None,
+        );
+        commands.entity(parent_entity).add_child(child_entity);
+    }
+
+    parent_entity
 }
 
-/// Process entity spawn requests queued by scripts (`groot.SpawnEntity` /
-/// `groot.SpawnPrefab`).
+fn update_entity_visuals(
+    commands: &mut Commands,
+    entity: Entity,
+    prefab: &PrefabConfig,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+) {
+    attach_visual_components(commands, entity, prefab, meshes, materials);
+}
+
+fn attach_visual_components(
+    commands: &mut Commands,
+    entity: Entity,
+    prefab: &PrefabConfig,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+) {
+    let Some(visual) = &prefab.visual else { return };
+    match visual {
+        VisualConfig::Sprite { size, color } => {
+            commands.entity(entity).insert((
+                Sprite {
+                    color: color.to_color(),
+                    custom_size: Some(Vec2::new(size.0, size.1)),
+                    ..default()
+                },
+                ScriptColor(color.to_color()),
+            ));
+        }
+        VisualConfig::Text { value, size, color } => {
+            commands.entity(entity).insert(Text2dBundle {
+                text: Text::from_section(
+                    value,
+                    TextStyle {
+                        font_size: *size,
+                        color: color.to_color(),
+                        ..default()
+                    },
+                ),
+                ..default()
+            });
+        }
+        VisualConfig::MeshPbr { shape, material } => {
+            let mesh_handle = match shape {
+                ShapeConfig::Cuboid { x, y, z } => meshes.add(Cuboid::new(*x, *y, *z)),
+                ShapeConfig::Sphere { radius } => meshes.add(Sphere::new(*radius)),
+                ShapeConfig::Cylinder { radius, height } => meshes.add(Cylinder::new(*radius, *height)),
+                ShapeConfig::Plane { size_x, size_z } => meshes.add(Plane3d::default().mesh().size(*size_x, *size_z)),
+            };
+            let mat_handle = materials.add(StandardMaterial {
+                base_color: material.color.to_color(),
+                perceptual_roughness: material.roughness,
+                metallic: material.metallic,
+                ..default()
+            });
+            commands.entity(entity).insert((
+                mesh_handle,
+                mat_handle,
+                ScriptColor(material.color.to_color()),
+            ));
+        }
+        VisualConfig::Light(light) => match light {
+            LightConfig::Point {
+                color,
+                intensity,
+                range,
+                shadows_enabled,
+            } => {
+                commands.entity(entity).insert(PointLight {
+                    color: color.to_color(),
+                    intensity: *intensity,
+                    range: *range,
+                    shadows_enabled: *shadows_enabled,
+                    ..default()
+                });
+            }
+            LightConfig::Directional {
+                color,
+                illuminance,
+                shadows_enabled,
+            } => {
+                commands.entity(entity).insert(DirectionalLight {
+                    color: color.to_color(),
+                    illuminance: *illuminance,
+                    shadows_enabled: *shadows_enabled,
+                    ..default()
+                });
+            }
+        },
+    }
+}
+
 fn handle_spawn_requests_system(
     mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     mut host: NonSendMut<GrootScriptHost>,
-    config: Option<Res<GrootConfig>>,
 ) {
     let mut reqs = match SPAWN_REQUESTS.lock() {
         Ok(reqs) => reqs,
@@ -1055,39 +1231,33 @@ fn handle_spawn_requests_system(
     };
     for req in reqs.drain(..) {
         match req {
-            SpawnRequest::Prefab { name, x, y, tag } => {
-                let prefabs = config.as_ref().map(|c| c.prefabs.clone()).unwrap_or_default();
-                let z = prefab_z(&prefabs, &name).unwrap_or(1.0);
-                if let Some(script) = prefabs.iter().find(|p| p.name == name).and_then(|p| p.script.clone())
-                {
-                    host.ensure_engine(&script);
+            SpawnRequest::Prefab { path, x, y, z, tag } => {
+                if let Some(prefab) = PrefabConfig::load(&path) {
+                    if let Some(script) = &prefab.script {
+                        host.ensure_engine(script);
+                    }
+                    let ov = TransformOverride {
+                        position: Some((x, y, z)),
+                        rotation: None,
+                        scale: None,
+                    };
+                    spawn_prefab_tree(
+                        &mut commands,
+                        &mut meshes,
+                        &mut materials,
+                        &prefab,
+                        &path,
+                        None,
+                        &tag,
+                        Some(&ov),
+                    );
                 }
-                spawn_prefab_entity(
-                    &mut commands,
-                    &prefabs,
-                    PrefabPlacement {
-                        name: &name,
-                        x,
-                        y,
-                        z,
-                        entity_id: None,
-                        pipe_index: None,
-                        tag: &tag,
-                    },
-                );
             }
-            SpawnRequest::Script { script, x, y, tag } => {
-                bevy::log::info!("[GROOT ECS] Spawning '{script}' at ({x}, {y})");
-                // Ensure the engine is loaded for the new script.
+            SpawnRequest::Script { script, x, y, z, tag } => {
                 host.ensure_engine(&script);
                 commands.spawn((
-                    SpriteBundle {
-                        sprite: Sprite {
-                            color: Color::WHITE,
-                            custom_size: Some(Vec2::new(32.0, 32.0)),
-                            ..default()
-                        },
-                        transform: Transform::from_xyz(x, y, 1.0),
+                    SpatialBundle {
+                        transform: Transform::from_xyz(x, y, z),
                         ..default()
                     },
                     GoScriptComponent {
@@ -1098,6 +1268,7 @@ fn handle_spawn_requests_system(
                     ScriptTransform {
                         x,
                         y,
+                        z,
                         ..default()
                     },
                     ScriptColor::default(),
@@ -1108,7 +1279,6 @@ fn handle_spawn_requests_system(
     }
 }
 
-/// Process gameplay events emitted by scripts.
 fn handle_script_events_system() {
     let mut events = match SCRIPT_EVENTS.lock() {
         Ok(events) => events,
@@ -1119,9 +1289,6 @@ fn handle_script_events_system() {
     }
 }
 
-/// Host-side debug overlay: draws a wireframe box around every entity that
-/// declared collider *data*. Scripts never draw; they only set `Collider` and
-/// the engine decides how (or whether) to visualize it.
 fn render_collider_debug_system(
     mut gizmos: Gizmos,
     debug: Res<DebugRender>,
@@ -1132,20 +1299,27 @@ fn render_collider_debug_system(
     }
     let color = Color::rgba(0.3, 1.0, 0.4, 1.0);
     for (transform, collider) in &query {
-        if collider.width > 0.0 && collider.height > 0.0 {
-            let (_, _, rot) = transform.rotation.to_euler(EulerRot::XYZ);
-            gizmos.rect_2d(
-                transform.translation.truncate(),
-                rot,
-                Vec2::new(collider.width, collider.height),
-                color,
-            );
+        match collider {
+            Collider::Box2D { width, height } => {
+                let (_, _, rot) = transform.rotation.to_euler(EulerRot::XYZ);
+                gizmos.rect_2d(
+                    transform.translation.truncate(),
+                    rot,
+                    Vec2::new(*width, *height),
+                    color,
+                );
+            }
+            Collider::Box3D { x: _, y: _, z: _ } => {
+                gizmos.cuboid(*transform, color);
+            }
+            Collider::Sphere3D { radius } => {
+                gizmos.sphere(transform.translation, transform.rotation, *radius, color);
+            }
+            Collider::None => {}
         }
     }
 }
 
-/// Stable pseudo-entity id for spawned script entities. Uses a global counter
-/// so ids remain unique across the game session without depending on `rand`.
 fn rand_entity_id() -> u32 {
     use std::sync::atomic::{AtomicU32, Ordering};
     static NEXT_ID: AtomicU32 = AtomicU32::new(10_000);

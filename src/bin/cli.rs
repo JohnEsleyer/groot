@@ -1,14 +1,3 @@
-// ============================================================================
-// GROOT GAME ENGINE CLI
-//
-// Scaffolds, runs, and builds Groot projects.
-//
-//   groot new <name>   Scaffold a new Groot project folder
-//   groot run          Run the current Groot game (cargo run)
-//   groot build        Build the release bundle (cargo build --release)
-//   groot info         Print engine version / paths
-// ============================================================================
-
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -54,10 +43,6 @@ fn main() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// groot new
-// ---------------------------------------------------------------------------
-
 fn cmd_new(args: &[String]) {
     let Some(name) = args.first() else {
         eprintln!("Error: missing project name. Usage: groot new <name>");
@@ -77,62 +62,107 @@ fn cmd_new(args: &[String]) {
 
     println!("Initializing Groot project: '{name}' ...");
 
+    fs::create_dir_all(project_path.join("assets/prefabs")).unwrap_or_else(|e| {
+        eprintln!("Error creating assets/prefabs: {e}");
+        std::process::exit(1);
+    });
+    fs::create_dir_all(project_path.join("assets/scenes")).unwrap_or_else(|e| {
+        eprintln!("Error creating assets/scenes: {e}");
+        std::process::exit(1);
+    });
     fs::create_dir_all(project_path.join("assets/scripts")).unwrap_or_else(|e| {
         eprintln!("Error creating assets/scripts: {e}");
         std::process::exit(1);
     });
-    fs::create_dir_all(project_path.join("assets/sprites")).unwrap_or_else(|e| {
-        eprintln!("Error creating assets/sprites: {e}");
-        std::process::exit(1);
-    });
 
     write_or_die(
-        project_path.join("groot.toml"),
+        project_path.join("assets/config.ron"),
         format!(
-            r#"[project]
-name = "{name}"
-version = "0.1.0"
-
-[window]
-title = "{name}"
-width = 800
-height = 600
-
-# --- Prefabs: visuals are data, scripts only add behavior ---
-[[prefab]]
-name = "player"
-script = "assets/scripts/player.go"
-size = [32.0, 32.0]
-z = 10.0
-
-  [prefab.sprite]
-  size = [32.0, 32.0]
-  color = [0.1, 0.8, 0.3, 1.0]
-
-# --- Scene ---
-[[scene.entity]]
-prefab = "player"
-x = 0.0
-y = 0.0
-entity_id = 1
-tag = "Player"
+            r#"(
+    project: (
+        name: "{name}",
+        version: "0.1.0",
+    ),
+    window: (
+        title: "{name}",
+        width: 1280.0,
+        height: 720.0,
+    ),
+    render: (
+        clear_color: Rgba(0.1, 0.1, 0.15, 1.0),
+    ),
+    initial_scene: "assets/scenes/main.scene.ron",
+)
 "#
         ),
     );
 
     write_or_die(
+        project_path.join("assets/prefabs/player.prefab.ron"),
+        r#"(
+    name: "player",
+    script: Some("assets/scripts/player.go"),
+    transform: (
+        position: (0.0, 1.0, 0.0),
+        rotation: (0.0, 0.0, 0.0),
+        scale: (1.0, 1.0, 1.0),
+    ),
+    visual: Some(MeshPbr(
+        shape: Cuboid(x: 1.0, y: 1.0, z: 1.0),
+        material: (
+            color: Rgba(0.2, 0.8, 0.3, 1.0),
+            roughness: 0.5,
+            metallic: 0.0,
+        ),
+    )),
+    collider: Some(Box3D(x: 1.0, y: 1.0, z: 1.0)),
+    children: [],
+)
+"#
+        .to_string(),
+    );
+
+    write_or_die(
+        project_path.join("assets/scenes/main.scene.ron"),
+        r#"(
+    name: "Main Scene",
+    environment: (
+        ambient_light: Some((
+            color: Rgba(1.0, 1.0, 1.0, 1.0),
+            brightness: 0.3,
+        )),
+        camera: Some(Perspective3D(
+            fov: 60.0,
+            position: (0.0, 5.0, 10.0),
+            look_at: (0.0, 0.0, 0.0),
+        )),
+    ),
+    entities: [
+        (
+            prefab: "assets/prefabs/player.prefab.ron",
+            entity_id: Some(1),
+            tag: "Player",
+            transform_override: None,
+        ),
+    ],
+)
+"#
+        .to_string(),
+    );
+
+    write_or_die(
         project_path.join("assets/scripts/player.go"),
         r#"type Player struct { Speed float64 }
-var self = Player{Speed: 300.0}
+var self = Player{Speed: 5.0}
 
 func OnUpdate(dt float64) {
     var pos = groot.GetSelfPosition()
-    var move = groot.GetAxis("Horizontal")
-    groot.SetSelfPosition(pos[0] + move*self.Speed*dt, pos[1])
+    var moveX = groot.GetAxis("Horizontal")
+    var moveZ = -groot.GetAxis("Vertical")
+    groot.SetSelfPosition(pos[0] + moveX*self.Speed*dt, pos[1], pos[2] + moveZ*self.Speed*dt)
 
-    // Declare hitbox data; the host engine renders/handles it.
-    groot.SetSelfCollider(32.0, 32.0)
-    groot.Log("Hello from Groot GoScript!")
+    groot.SetSelfCollider(1.0, 1.0, 1.0)
+    groot.Log("Hello from Groot 3D GoScript!")
 }
 "#
         .to_string(),
@@ -141,22 +171,20 @@ func OnUpdate(dt float64) {
     write_or_die(
         project_path.join("README.md"),
         format!(
-            "# {name}\n\nA Groot game project. Scripts live in `assets/scripts/`, sprites in `assets/sprites/`.\nVisuals are defined as prefab data in `groot.toml`; scripts only add behavior.\n\n- `groot run` to run\n- `groot build` to build a release bundle\n"
+            "# {name}\n\nA Groot game project. RON prefabs live in `assets/prefabs/`, scenes in `assets/scenes/`, and GoScript in `assets/scripts/`.\n\n- `groot run` to run\n- `groot build` to build a release bundle\n"
         ),
     );
 
     println!();
     println!("Project '{name}' created successfully!");
     println!();
-    println!("  {}/groot.toml", project_path.display());
+    println!("  {}/assets/config.ron", project_path.display());
+    println!("  {}/assets/prefabs/player.prefab.ron", project_path.display());
+    println!("  {}/assets/scenes/main.scene.ron", project_path.display());
     println!("  {}/assets/scripts/player.go", project_path.display());
     println!();
-    println!("Next: run `groot run` from the engine workspace to play.");
+    println!("Next: run `groot run` to play.");
 }
-
-// ---------------------------------------------------------------------------
-// groot run / build / info
-// ---------------------------------------------------------------------------
 
 fn cmd_run(dir: Option<&str>) {
     let workdir = resolve_workdir(dir);
@@ -196,14 +224,10 @@ fn cmd_info() {
     println!("  groot version : {VERSION}");
     println!("  cargo package     : groot");
     println!("  cwd               : {}", std::env::current_dir().unwrap_or_default().display());
-    println!("  scripts dir       : assets/scripts");
-    println!("  project config    : groot.toml");
+    println!("  assets dir        : assets/");
+    println!("  project config    : assets/config.ron");
     println!("==================================================");
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 fn resolve_workdir(dir: Option<&str>) -> PathBuf {
     match dir {

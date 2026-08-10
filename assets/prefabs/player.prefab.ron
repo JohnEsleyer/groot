@@ -1,0 +1,37 @@
+(
+    name: "player",
+    script: Some("assets/scripts/player_3d.go"),
+    transform: (
+        position: (0.0, 1.0, 0.0),
+        rotation: (0.0, 0.0, 0.0),
+        scale: (1.0, 1.0, 1.0),
+    ),
+    visual: Some(MeshPbr(
+        shape: Cuboid(x: 1.0, y: 1.5, z: 1.0),
+        material: (
+            color: Rgba(0.2, 0.7, 1.0, 1.0),
+            roughness: 0.3,
+            metallic: 0.1,
+        ),
+    )),
+    collider: Some(Box3D(x: 1.0, y: 1.5, z: 1.0)),
+    children: [
+        (
+            name: "player_light",
+            script: None,
+            transform: (
+                position: (0.0, 1.2, 0.5),
+                rotation: (0.0, 0.0, 0.0),
+                scale: (1.0, 1.0, 1.0),
+            ),
+            visual: Some(Light(Point(
+                color: Rgba(1.0, 0.9, 0.7, 1.0),
+                intensity: 1500.0,
+                range: 12.0,
+                shadows_enabled: true,
+            ))),
+            collider: None,
+            children: [],
+        ),
+    ],
+)

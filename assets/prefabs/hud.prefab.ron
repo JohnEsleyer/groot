@@ -1,0 +1,16 @@
+(
+    name: "hud",
+    script: None,
+    transform: (
+        position: (0.0, 320.0, 0.0),
+        rotation: (0.0, 0.0, 0.0),
+        scale: (1.0, 1.0, 1.0),
+    ),
+    visual: Some(Text(
+        value: "Groot 3D Engine | WASD/Arrows: Move | Space: Change Color | Live Hot Reloading (RON + Go)",
+        size: 20.0,
+        color: Rgba(1.0, 1.0, 1.0, 1.0),
+    )),
+    collider: None,
+    children: [],
+)

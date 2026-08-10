@@ -1,45 +1,33 @@
 # Groot
 
-Groot is a fast-iteration 2D game engine pairing **Bevy** (Rust ECS + rendering)
+Groot is a fast-iteration 2D/3D game engine pairing **Bevy** (Rust ECS + rendering)
 with **GoScript** — an embeddable Go-syntax scripting VM written in pure Rust.
 Game logic lives in `.go` files under `assets/scripts/` and hot-reloads on save;
-the host engine is fully ECS-driven, so script state routes through Bevy
-components rather than global mutable maps.
+visuals and prefab hierarchies live in RON asset files under `assets/prefabs/` and `assets/scenes/`.
 
 ## Architecture
 
 Groot is **data-driven**: scripts own behavior and data; the host engine owns
-representation and rendering. Visuals are declared as prefab data in
-`groot.toml`, so no Rust is needed to define what anything looks like.
+representation and rendering. Visuals are declared as RON prefab data.
 
 ```
-groot.toml (prefabs + scene)  ──►  Bevy ECS (sprites/UI from prefab DATA)
-assets/scripts/*.go  ──►  GoScript VM (HotReloadEngine)  ──►  entity DATA
-                                     ▲                                  │
-                                     └── groot.* host bindings ──────────┘
+assets/scenes/*.scene.ron  ──►  Bevy ECS (3D Meshes, Lights, Sprites, UI)
+assets/prefabs/*.prefab.ron ──►  RonAssetWatcher (Visual Hot Reloading)
+assets/scripts/*.go        ──►  GoScript VM (Logic Hot Reloading)  ──► Entity Data
+                                         ▲                                  │
+                                         └── groot.* host bindings ──────────┘
 ```
 
-- `groot.toml` — project config: `[window]`, `[[prefab]]` (sprite/text visuals +
-  optional behavior script), `[[scene.entity]]` (initial entities).
-- `src/main.rs` — loads `groot.toml`, builds the window, inserts `GrootConfig`.
-- `src/groot_plugin.rs` — the engine: components (`GoScriptComponent`,
-  `ScriptTransform`, `ScriptColor`, `Collider`, `PipeIndex`, `ScoreText`),
-  the script host (`GrootScriptHost`), prefab/scene spawning, input sync,
-  per-frame script execution, and cross-boundary queues for spawns/events.
-- `src/groot_module.rs` — stateless `groot.*` utilities (math, collision, log).
-- `src/bin/cli.rs` — the `groot` CLI tool (`groot new` / `run` / `build`).
-
-Script state is **ECS-first**: `script_execution_system` copies each script
-entity's `Transform`/`Sprite`/`Collider` into a thread-local scratch, runs
-`OnUpdate`, then writes the scratch back to the components (and mirrors it into
-`ScriptTransform`/`ScriptColor` for component readers). No global
-`ENTITY_STATES` map. Scripts never draw; debug collider overlays are rendered
-from `Collider` data by the engine when `DebugRender.show_colliders` is on.
+- `assets/config.ron` — project config & render settings.
+- `assets/prefabs/*.prefab.ron` — 2D/3D prefabs (sprites, text, 3D PBR meshes, lights, colliders, parent-child hierarchies).
+- `assets/scenes/*.scene.ron` — scene layout, environment settings, cameras, entity initializers.
+- `src/main.rs` — initializes Bevy, loads `assets/config.ron`, runs `GrootPlugin`.
+- `src/groot_plugin.rs` — engine core: components (`GoScriptComponent`, `ScriptTransform`, `ScriptColor`, `Collider`), dual hot reloading, ECS execution, 2D/3D gizmos.
 
 ## CLI
 
 ```bash
-# Scaffold a new project folder (groot.toml + prefab + assets/scripts/player.go)
+# Scaffold a new project folder
 cargo run --bin groot -- new my-game
 
 # Run the current Groot game
@@ -47,44 +35,35 @@ cargo run --bin groot -- run
 
 # Build a release bundle
 cargo run --bin groot -- build
-
-# Engine info / help
-cargo run --bin groot -- info
 ```
 
-Or install the CLI globally and call it directly:
-
-```bash
-cargo install --path . --bin groot
-groot new my-game
-```
-
-## Run the demo
+## Run the Demo
 
 ```bash
 cargo run
 ```
 
-A Flappy Bird demo starts immediately. Its window, bird sprite, ground, pipes,
-and score HUD are **data** in `groot.toml`; `flappy.go` only provides
-behavior. Scripts in `assets/scripts/` hot-reload when you save them;
-live global values are preserved across reloads.
+A 3D demo scene starts up featuring a player cube with child lighting controlled via WASD/Arrows and Space, a continuously rotating golden 3D cube, and a 2D HUD text overlay. Save any `.go` or `.prefab.ron` file to see live hot reloading!
 
 ## Writing scripts
 
 ```go
 type Player struct { Speed float64 }
-var self = Player{Speed: 300.0}
+var self = Player{Speed: 5.0}
 
 func OnUpdate(dt float64) {
     var pos = groot.GetSelfPosition()
-    var move = groot.GetAxis("Horizontal")
-    groot.SetSelfPosition(pos[0] + move*self.Speed*dt, pos[1])
-    groot.Log("Hello from Groot GoScript!")
+    var moveX = groot.GetAxis("Horizontal")
+    var moveZ = -groot.GetAxis("Vertical")
+    groot.SetSelfPosition(pos[0] + moveX*self.Speed*dt, pos[1], pos[2] + moveZ*self.Speed*dt)
+
+    groot.SetSelfCollider(1.0, 1.0, 1.0)
+    groot.Log("Hello from Groot 3D GoScript!")
 }
 ```
 
 ## Dependencies
 
 - `bevy` 0.13
+- `ron` 0.8
 - `goscript` (git: `github.com/johnesleyer/goscript`)

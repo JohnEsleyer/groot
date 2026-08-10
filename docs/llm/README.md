@@ -1,19 +1,15 @@
-# LLM Contributor Guide — Groot (Bevy)
+# LLM Contributor Guide — Groot (Bevy + GoScript)
 
-Technical notes, gotchas, and conventions for LLMs working on the Groot Bevy engine.
+Technical notes and conventions for LLMs working on the Groot engine.
 
 ---
 
 ## 1. Architecture Overview
 
-Groot is a **data-driven hybrid game engine**: scripts own *behavior and data*,
-the host engine owns *representation and rendering*.
-
-- **Data/Behavior** — GoScript (`.go`) files manipulate entity data: position,
-  velocity, color, scale, collider, state, spawns, and events.
-- **Presentation** — Bevy ECS + sprites/UI. Visuals are declared as *data* in
-  `groot.toml` prefabs and spawned by the engine. Scripts never issue draw
-  calls — they write components/data that Bevy renders.
+Groot is a data-driven hybrid 2D/3D engine:
+- **Data/Visuals** — Declarative RON files under `assets/prefabs/` and `assets/scenes/`.
+- **Behavior** — GoScript files under `assets/scripts/`.
+- **Presentation & ECS** — Bevy 0.13.
 
 ### Crate structure
 - `goscript` (library) — the GoScript VM, compiler, hot-reload engine
@@ -22,93 +18,100 @@ the host engine owns *representation and rendering*.
 ### Key files
 | File | Purpose |
 |------|---------|
-| `groot.toml` | Project config: window, `[[prefab]]` visuals, `[[scene.entity]]` initial entities |
-| `src/main.rs` | Loads `groot.toml`, builds the window, inserts `GrootConfig`, adds the plugin |
-| `src/groot_plugin.rs` | Core Bevy plugin: components, host functions, ECS systems, prefab/scene spawning |
-| `src/groot_module.rs` | Stateless `GrootModuleExt` trait (math, collision, logging) — pure functions, no state, no rendering |
+| `assets/config.ron` | Project config: window, render settings, initial scene path |
+| `assets/prefabs/*.prefab.ron` | RON prefabs: 2D/3D visuals, colliders, scripts, child hierarchies |
+| `assets/scenes/*.scene.ron` | Scene layout: camera, lighting, entity instantiation |
+| `src/main.rs` | Loads `assets/config.ron`, builds window, runs `GrootPlugin` |
+| `src/groot_plugin.rs` | Core Bevy plugin: RON schemas, components, host functions, ECS systems |
+| `src/groot_module.rs` | Stateless `GrootModuleExt` trait (math, collision, logging) |
 | `src/bin/cli.rs` | `groot` CLI — scaffolds/runs/builds projects |
 
 ---
 
 ## 2. Architecture Rules (Never Violate)
 
-- **Scripts manipulate data, never rendering.** No `Draw*`, no immediate-mode
-  geometry from scripts. Debug visualization is driven by declared data:
-  scripts set a `Collider` component (via `groot.SetSelfCollider`) and the
-  engine draws the overlay when `DebugRender.show_colliders` is on.
-- **`GrootScriptHost` does NOT derive `Resource`.** goscript uses `Rc`/`RefCell`
-  which are not `Send`/`Sync`. Use `NonSend`/`NonSendMut` in Bevy systems.
-- **`GrootModuleExt` is stateless.** It only adds pure utility methods to
-  `VirtualMachine` — no `self`, no entity lookup, no rendering.
-- **No global entity-state map.** `ENTITY_STATES` was removed. Self state flows
-  through a thread-local scratch (`CURRENT_ENTITY` + `CURRENT_STATE`) that
-  `script_execution_system` copies from/to the entity's ECS components every
-  frame. The ECS components are the source of truth.
-- **`static Mutex` only for cross-system queues** that other systems drain:
-  `SPAWN_REQUESTS`, `SCRIPT_EVENTS`. Entity state never uses them.
-- **Foreign-host calls cross the VM boundary via `static`/thread-local**
-  because native bindings can't borrow the Bevy world.
-- **Visuals are data.** To change how something looks, edit a prefab in
-  `groot.toml` — not Rust. Use `kind = "pipe"` / `kind = "score"` for special
-  host components.
+- **Scripts manipulate data, never rendering.** Debug visualization is driven by declared data.
+- **`GrootScriptHost` does NOT derive `Resource`.** goscript uses `Rc`/`RefCell` (not `Send`/`Sync`). Use `NonSend`/`NonSendMut`.
+- **`GrootModuleExt` is stateless.** Pure utility methods only.
+- **No global entity-state map.** Self state flows through thread-local scratch (`CURRENT_ENTITY` + `CURRENT_STATE`), synced to/from ECS components each frame.
+- **`static Mutex` only for cross-system queues:** `SPAWN_REQUESTS`, `SCRIPT_EVENTS`.
+- **Visuals are RON data.** To change how something looks, edit a `.prefab.ron` file.
 
 ---
 
-## 3. File-Specific Gotchas
+## 3. RON Asset Schemas
 
-### `groot.toml`
-- `[[prefab]]` entries map a name to a `sprite`/`text`, optional `script`
-  (behavior), optional `size` (collider box), and optional `z`.
-- `[[scene.entity]]` lists initial entities by prefab name + position.
-- Wire-field naming in serde matches the TOML header: the struct field for
-  prefabs is `prefabs` deserialized with `#[serde(rename = "prefab")]`, and the
-  scene list is `entities` with `#[serde(rename = "entity")]`.
+### Config (`assets/config.ron`)
+```ron
+(
+    project: (name: "...", version: "..."),
+    window: (title: "...", width: 1280.0, height: 720.0),
+    render: (clear_color: Rgba(0.08, 0.09, 0.12, 1.0)),
+    initial_scene: "assets/scenes/main.scene.ron",
+)
+```
 
-### `groot_plugin.rs`
-- `GrootScriptHost` wraps `HashMap<String, HotReloadEngine>` keyed by script path.
-- `CURRENT_ENTITY` / `CURRENT_STATE` — thread-locals set during each script call.
-- `SPAWN_REQUESTS: Mutex<Vec<SpawnRequest>>` — `Prefab`/`Script` variants.
-- All host functions receive `&[Value]` and return `Value`. Use
-  `args.first().and_then(|v| v.as_number())` for arguments.
-- `groot.GetSelfPosition()` / `groot.GetEntityPosition(id)` return
-  `Value::Slice`. Slice indexing in complex argument lists is **safe** now (the
-  VM was hardened: operand-stack restoration on error, negative-index errors,
-  and stack-underflow detection in `SetLocal`/`Call`/`CallMethod`).
+### Prefab (`assets/prefabs/*.prefab.ron`)
+```ron
+(
+    name: "entity_name",
+    script: Some("assets/scripts/go_file.go"),
+    transform: (
+        position: (x, y, z),
+        rotation: (pitch, yaw, roll),  // Euler degrees
+        scale: (sx, sy, sz),
+    ),
+    visual: Some(MeshPbr(
+        shape: Cuboid(x: 1.0, y: 1.0, z: 1.0),
+        material: (color: Rgba(r, g, b, a), roughness: 0.5, metallic: 0.0),
+    )),
+    collider: Some(Box3D(x: 1.0, y: 1.0, z: 1.0)),
+    children: [ ... ],
+)
+```
 
-### `groot_module.rs`
-- `GrootModuleExt` is a trait on `VirtualMachine` — pure math utilities only.
-- Names are engine-neutral (`RectsOverlap`, `CirclesOverlap`, `CircleHitsRect`).
+### Scene (`assets/scenes/*.scene.ron`)
+```ron
+(
+    name: "Scene Name",
+    environment: (
+        ambient_light: Some((color: Rgba(...), brightness: 0.25)),
+        camera: Some(Perspective3D(fov: 60.0, position: (...), look_at: (...))),
+    ),
+    entities: [
+        (prefab: "path.ron", entity_id: Some(1), tag: "Tag", transform_override: None),
+    ],
+)
+```
 
-### `main.rs`
-- Loads `GrootConfig::load("groot.toml")`, inserts it as a resource, and lets
-  `spawn_scene_system` (registered by the plugin on `Startup`) do the spawning.
-- Bevy 0.13: `Camera2dBundle::default()`.
+### Visual Types
+- `Sprite { size, color }` — 2D sprite
+- `Text { value, size, color }` — 2D text overlay
+- `MeshPbr { shape, material }` — 3D PBR mesh (Cuboid, Sphere, Cylinder, Plane)
+- `Light(Point | Directional)` — 3D light sources
+
+### Collider Types
+- `Box2D { width, height }` — 2D AABB
+- `Box3D { x, y, z }` — 3D AABB
+- `Sphere3D { radius }` — 3D sphere
 
 ---
 
 ## 4. Host Function API Reference
 
-All `groot.*` functions are registered in `GrootScriptHost::ensure_engine`
-(`groot_plugin.rs`) plus the stateless `groot_module.rs` utilities.
-
-### Logging
+### 3D Self-context (reads/writes thread-local scratch)
 ```
-groot.Log(msg string)
-groot.Warn(msg string)
-groot.Error(msg string)
-```
-
-### Entity data (self — reads/writes the thread-local data scratch)
-```
-groot.GetSelfEntity() int              // current entity ID
-groot.GetSelfPosition() []float64      // [x, y]
-groot.SetSelfPosition(x, y float64)
-groot.GetSelfRotation() float64
-groot.SetSelfRotation(r float64)
-groot.GetSelfScale() []float64         // [x, y]
-groot.SetSelfScale(sx, sy float64)
+groot.GetSelfPosition() []float64      // [x, y, z]
+groot.SetSelfPosition(x, y, z float64)
+groot.GetSelfRotation() float64        // yaw
+groot.SetSelfRotation(yaw float64)
+groot.SetSelfRotation3D(pitch, yaw, roll float64)
+groot.GetSelfScale() []float64         // [sx, sy, sz]
+groot.SetSelfScale(sx, sy, sz float64)
 groot.SetSelfColor(r, g, b, a float64)
-groot.SetSelfCollider(w, h float64)    // hitbox data — engine owns its usage/rendering
+groot.SetSelfMaterialColor(r, g, b, a float64)
+groot.SetSelfCollider(x, y float64)    // Box2D
+groot.SetSelfCollider(x, y, z float64) // Box3D
 groot.DestroySelf()
 ```
 
@@ -116,154 +119,82 @@ groot.DestroySelf()
 ```
 groot.GetAxis(axis string) float64     // "Horizontal", "Vertical"
 groot.IsKeyDown("Space") bool
-groot.IsKeyPressed("Space") bool       // just pressed this frame
-groot.GetMouseWorld() []float64        // cursor in world coords
-groot.IsMouseDown(0|1|2) bool          // 0 left, 1 right, 2 middle
+groot.IsKeyPressed("Space") bool
+groot.GetMouseWorld() []float64
+groot.IsMouseDown(0|1|2) bool
 groot.IsMousePressed(0|1|2) bool
 ```
 
-### Entity queries (resolved from a per-frame snapshot)
+### Entity queries (per-frame snapshot)
 ```
-groot.GetEntityPosition(id int) []float64
-groot.GetDistance(idA, idB int) float64
+groot.GetEntityPosition(id int) []float64  // [x, y, z]
+groot.GetDistance(idA, idB int) float64    // 3D distance
 ```
 
 ### Commands
 ```
-groot.SpawnPrefab(name string, x, y float64, tag string)   // spawn a prefab from groot.toml
-groot.SpawnEntity(script string, x, y float64, tag string) // spawn a raw scripted entity
-groot.PlaySound(name string)                                // logs for now
+groot.SpawnPrefab(path string, x, y, z float64, tag string)
+groot.SpawnEntity(script string, x, y, z float64, tag string)
 groot.EmitEvent(name string, payload float64)
 ```
 
-### Math / collision (stateless utilities in groot_module.rs)
+### Stateless utilities (groot_module.rs)
 ```
-groot.Clamp(v, min, max float64) float64
-groot.Lerp(a, b, t float64) float64
-groot.GetDistance2D(x1, y1, x2, y2 float64) float64
-groot.RectsOverlap(x1, y1, w1, h1, x2, y2, w2, h2 float64) bool
-groot.CirclesOverlap(x1, y1, r1, x2, y2, r2 float64) bool
-groot.CircleHitsRect(cx, cy, r, rx, ry, rw, rh float64) bool
-```
-
-### Game-write demos (routed to tagged entities by the execution system)
-```
-groot.SetPipePosition(idx int, x, gapY, gapSize float64) // moves PipeIndex entities
-groot.SetScoreDisplay(score, best int)                    // updates the ScoreText entity
+groot.Log(msg), groot.Warn(msg), groot.Error(msg)
+groot.Clamp(v, min, max), groot.Lerp(a, b, t)
+groot.GetDistance2D(x1, y1, x2, y2)
+groot.RectsOverlap(...), groot.CirclesOverlap(...), groot.CircleHitsRect(...)
 ```
 
 ---
 
-## 5. Entity Setup (GoScript Side)
+## 5. Bevy System Pipeline
 
-Entities get their visual from a `[[prefab]]` and their behavior from an
-optional `script`. The script never mentions meshes/colors-as-visuals; it
-mutates *data*.
-
-### Minimal script template
-```go
-type Player struct { Speed float64 }
-var self = Player{Speed: 300.0}
-
-func OnUpdate(dt float64) {
-    var pos = groot.GetSelfPosition()
-    var move = groot.GetAxis("Horizontal")
-    groot.SetSelfPosition(pos[0] + move*self.Speed*dt, pos[1])
-
-    // Declare hitbox data; the engine draws/handles it. We never draw.
-    groot.SetSelfCollider(32.0, 32.0)
-}
-```
-
-### Script conventions
-- `OnUpdate(dt float64)` — called every frame with delta time.
-- Receiver methods: `func (p *Player) TakeDamage(n int)` — call internally.
-- Global variables are preserved across hot-reloads.
-- `groot.Log(...)` / `groot.Warn(...)` write to the Bevy console.
+1. `script_hot_reload_system` — recompiles changed `.go` files
+2. `ron_hot_reload_system` — live-reloads changed `.prefab.ron` files (updates visuals, preserves script state)
+3. `script_input_sync_system` — snapshots keyboard/mouse
+4. `script_execution_system` — runs `OnUpdate` per script entity, syncs Transform/Sprite/Material/Collider
+5. `handle_spawn_requests_system` — processes `groot.SpawnPrefab`/`groot.SpawnEntity`
+6. `handle_script_events_system` — logs `groot.EmitEvent` events
+7. `render_collider_debug_system` — draws 2D/3D collider wireframes
 
 ---
 
-## 6. Bevy System Pipeline
+## 6. Hot-Reload Workflow
 
-Systems execute in this order each frame (all chained in `Update`):
-
-1. `script_hot_reload_system` — reloads scripts when files change
-2. `script_input_sync_system` — snapshots keyboard/mouse state once per frame
-3. `script_execution_system` — for each script entity: copy ECS → scratch run
-   `OnUpdate`, copy scratch → ECS (Transform/Sprite/ScriptTransform/ScriptColor/
-   Collider), despawn on request; then applies queued `GameWrite`s to tagged
-   entities (pipes/score)
-4. `handle_spawn_requests_system` — spawns `SPAWN_REQUESTS` (prefab/script)
-5. `handle_script_events_system` — logs `SCRIPT_EVENTS`
-6. `render_collider_debug_system` — draws a wireframe box per `Collider` when
-   `DebugRender.show_colliders`
-
-`Startup` runs `spawn_scene_system` to build the initial scene from `groot.toml`.
+**GoScript:** Edit `.go` in `assets/scripts/`, save, VM recompiles, globals preserved.
+**RON Prefabs:** Edit `.prefab.ron` in `assets/prefabs/`, save, engine re-spawns visuals (meshes, materials, colliders) while preserving `GoScriptComponent` state.
 
 ---
 
-## 7. Common Pitfalls
+## 7. Adding a New Feature Checklist
 
-### Slice indexing in argument lists (fixed)
-Indexing slices inside multi-arg host calls — e.g.
-`groot.RectsOverlap(px, py, pos[0], pos[1], ...)` — is now safe. The VM was
-hardened to restore the operand stack to pre-call depth on script errors, reject
-negative indices, and detect stack misalignment. Prefer extracting locals for
-readability:
-```go
-var px = pos[0]
-var py = pos[1]
-```
-
-### GoScript stdlib imports
-- `math.Sin`, `fmt.Sprintf`, `rand.Float()`, `rand.Intn(n)`, `time.Delta` are
-  built-in — do NOT use `import` statements.
-
-### Bevy 0.13 specifics
-- `gizmos.rect_2d(position, rotation, size, color)` for the collider overlay.
-- Camera bundle: `Camera2dBundle::default()`.
-
-### `Value::Slice` access
-```go
-var pos = groot.GetSelfPosition()
-var px = pos[0]  // safe
-var sum = pos[0] + pos[1]  // safe (regression-tested)
-```
+1. **Read existing host functions** in `groot_plugin.rs` — mimic the `groot.SnakeCaseName` pattern.
+2. **Pure math/log?** Add to `groot_module.rs`.
+3. **Per-entity data?** Use `CURRENT_ENTITY` / `CURRENT_STATE` thread-local scratch.
+4. **Cross-system command?** Use `static Mutex` queues.
+5. **New visual?** Define a `.prefab.ron` file; don't hardcode in Rust.
+6. **Run `cargo build`** — zero warnings required.
+7. **Test** with a `.go` script and verify runtime behavior.
 
 ---
 
-## 8. Hot-Reload Workflow
+## 8. Graphics Are Data
 
-1. Edit any `.go` file in `assets/scripts/`.
-2. Save. `script_hot_reload_system` detects the change.
-3. The engine recompiles with `HotReloadEngine::reload_if_changed()`.
-4. Live global values (e.g. `var self = Player{...}`) are preserved.
-5. Next tick executes the updated `OnUpdate` immediately.
-
-**Note:** Hot-reload is per-script-path. Each script path gets its own
-`HotReloadEngine` instance.
-
----
-
-## 9. Adding a New Feature Checklist
-
-1. **Read existing host functions** in `groot_plugin.rs` — mimic the
-   `groot.SnakeCaseName` pattern.
-2. **Pure math/log?** Add it to `groot_module.rs` (stateless, no rendering).
-3. **Per-entity data?** Use the `CURRENT_ENTITY` / `CURRENT_STATE` thread-local
-   scratch (as `groot.SetSelf*` does). Do NOT add a global state map.
-4. **Cross-system command?** Use the existing `static Mutex` queues
-   (`SPAWN_REQUESTS`, `SCRIPT_EVENTS`).
-5. **New visual?** Define a prefab in `groot.toml`; don't hardcode in Rust.
-6. **Run `cargo build`** — zero warnings required before commit.
-7. **Test** with a `.go` script call and verify runtime behavior.
-
----
-
-## 10. Graphics Are Data
-
-Users define **no Rust** to make visuals: prefabs in `groot.toml` map names to
-sprite size/color (and optionally a behavior script). The engine's
+Users define **no Rust** to make visuals: prefabs in RON files map names to
+meshes/sprites/lights and optionally a behavior script. The engine's
 `spawn_scene_system` / `handle_spawn_requests_system` turn that data into Bevy
-bundles. This keeps scripts as pure logic and preserves Bevy's batching and
-render graph.
+bundles. Scripts are pure logic; the engine handles rendering.
+
+---
+
+## 9. 3D GoScript Bindings
+
+The `CURRENT_STATE` thread-local scratch supports full 3D:
+- Position: `(x, y, z)`
+- Rotation: `(pitch, yaw, roll)` in Euler degrees
+- Scale: `(scale_x, scale_y, scale_z)`
+- Material color: `(r, g, b, a)` — applies to both Sprite and StandardMaterial
+
+Scripts can set 3D colliders (`Box3D`) via `groot.SetSelfCollider(x, y, z)`.
+The `render_collider_debug_system` draws 3D wireframe cuboids and spheres via Bevy Gizmos.
