@@ -42,8 +42,20 @@ pub enum SpawnRequest {
 
 static SPAWN_REQUESTS: Mutex<Vec<SpawnRequest>> = Mutex::new(Vec::new());
 
+/// Cached metadata for a loaded script — tracks which lifecycle hooks are defined.
+#[derive(Debug, Clone, Default)]
+pub struct ScriptMetadata {
+    pub has_on_update: bool,
+    pub has_on_start: bool,
+}
+
+pub struct LoadedScript {
+    pub engine: HotReloadEngine,
+    pub metadata: ScriptMetadata,
+}
+
 pub struct GrootScriptHost {
-    engines: HashMap<String, HotReloadEngine>,
+    scripts: HashMap<String, LoadedScript>,
     pub input: Rc<InputState>,
     pub plugin_mgr: PluginManager,
 }
@@ -51,17 +63,17 @@ pub struct GrootScriptHost {
 impl GrootScriptHost {
     pub fn new() -> Self {
         Self {
-            engines: HashMap::new(),
+            scripts: HashMap::new(),
             input: Rc::new(InputState::new()),
             plugin_mgr: PluginManager::new(),
         }
     }
 
-    pub fn ensure_engine(&mut self, script_path: &str) -> &mut HotReloadEngine {
+    pub fn ensure_engine(&mut self, script_path: &str) -> &mut LoadedScript {
         let resolved_path = crate::assets::prepare_script_path(script_path);
         let input_ref = Rc::clone(&self.input);
         let plugin_mgr_ref = &self.plugin_mgr;
-        self.engines
+        self.scripts
             .entry(script_path.to_string())
             .or_insert_with(|| {
                 let mut engine = HotReloadEngine::new(&resolved_path);
@@ -184,13 +196,29 @@ impl GrootScriptHost {
                 });
 
                 let _ = engine.reload_if_changed();
-                engine
+
+                let metadata = ScriptMetadata {
+                    has_on_update: engine.vm.globals.contains_key("OnUpdate"),
+                    has_on_start: engine.vm.globals.contains_key("OnStart"),
+                };
+
+                LoadedScript { engine, metadata }
             })
     }
 
     pub fn reload_all(&mut self) {
-        for engine in self.engines.values_mut() {
-            let _ = engine.reload_if_changed();
+        for loaded in self.scripts.values_mut() {
+            if let Ok(reloaded) = loaded.engine.reload_if_changed() {
+                if reloaded {
+                    loaded.metadata.has_on_update = loaded.engine.vm.globals.contains_key("OnUpdate");
+                    loaded.metadata.has_on_start = loaded.engine.vm.globals.contains_key("OnStart");
+                    log::info!(
+                        "[GROOT SCRIPT] Reloaded with hooks: update={}, start={}",
+                        loaded.metadata.has_on_update,
+                        loaded.metadata.has_on_start
+                    );
+                }
+            }
         }
     }
 }
@@ -236,10 +264,13 @@ pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
             s.destroy_requested = false;
         });
 
-        let engine = host.ensure_engine(&comp.script_path);
-        engine.vm.set_delta_time(dt);
-        if let Err(e) = engine.vm.call("OnUpdate", vec![Value::Float(dt)]) {
-            log::error!("[GROOT SCRIPT ERROR] entity #{}: {e}", comp.entity_id);
+        let loaded = host.ensure_engine(&comp.script_path);
+
+        if loaded.metadata.has_on_update {
+            loaded.engine.vm.set_delta_time(dt);
+            if let Err(e) = loaded.engine.vm.call("OnUpdate", vec![Value::Float(dt)]) {
+                log::error!("[GROOT SCRIPT ERROR] entity #{}: {e}", comp.entity_id);
+            }
         }
 
         CURRENT_STATE.with(|st| {
