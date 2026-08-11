@@ -1,5 +1,5 @@
 use std::cell::{Cell, RefCell};
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::{ElementState, MouseButton, TouchPhase, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
 
 pub struct InputState {
@@ -69,6 +69,32 @@ impl InputState {
                     pressed[idx] = true;
                 }
                 down[idx] = is_pressed;
+
+                self.mouse_button_down.set(down);
+                self.mouse_button_pressed.set(pressed);
+            }
+            // Mobile touchscreen support: map touch events to mouse button 0 so
+            // GoScript `groot.IsMouseDown(0)` and cursor queries keep working.
+            WindowEvent::Touch(touch) => {
+                self.mouse_pos.set((touch.location.x, touch.location.y));
+                let idx = 0;
+                let mut down = self.mouse_button_down.get();
+                let mut pressed = self.mouse_button_pressed.get();
+
+                match touch.phase {
+                    TouchPhase::Started => {
+                        if !down[idx] {
+                            pressed[idx] = true;
+                        }
+                        down[idx] = true;
+                    }
+                    TouchPhase::Moved => {
+                        down[idx] = true;
+                    }
+                    TouchPhase::Ended | TouchPhase::Cancelled => {
+                        down[idx] = false;
+                    }
+                }
 
                 self.mouse_button_down.set(down);
                 self.mouse_button_pressed.set(pressed);

@@ -28,12 +28,12 @@ fn print_help() {
     println!("Usage: groot <command> [args]");
     println!();
     println!("Commands:");
-    println!("  new <name>   - Scaffold a new Groot project");
-    println!("  run [path]   - Run the Groot game (cargo run)");
-    println!("  build        - Build release binary (cargo build --release)");
-    println!("  plugin       - Manage plugins (list, add, remove)");
-    println!("  info         - Print engine version and workspace info");
-    println!("  help         - Show this help");
+    println!("  new <name>            - Scaffold a new Groot project");
+    println!("  run [--target <t>]    - Run Groot game (targets: desktop, web, android)");
+    println!("  build [--target <t>]  - Build release bundle (targets: desktop, web, android)");
+    println!("  plugin                - Manage plugins (list, add, remove)");
+    println!("  info                  - Print engine version and workspace info");
+    println!("  help                  - Show this help");
     println!("==================================================");
 }
 
@@ -46,8 +46,8 @@ fn main() {
 
     match args[1].as_str() {
         "new" => cmd_new(&args[2..]),
-        "run" => cmd_run(args.get(2).map(|s| s.as_str())),
-        "build" => cmd_build(),
+        "run" => cmd_run(&args[2..]),
+        "build" => cmd_build(&args[2..]),
         "plugin" => cmd_plugin(&args[2..]),
         "info" => cmd_info(),
         "help" | "--help" | "-h" => print_help(),
@@ -60,6 +60,16 @@ fn main() {
             std::process::exit(2);
         }
     }
+}
+
+/// Extract `--target <desktop|web|android>` from the arg list (defaults to desktop).
+fn parse_target(args: &[String]) -> &str {
+    for i in 0..args.len() {
+        if args[i] == "--target" && i + 1 < args.len() {
+            return args[i + 1].as_str();
+        }
+    }
+    "desktop"
 }
 
 fn cmd_new(args: &[String]) {
@@ -260,35 +270,106 @@ Thumbs.db
     println!("Next: cd {name} && groot run");
 }
 
-fn cmd_run(dir: Option<&str>) {
-    let workdir = resolve_workdir(dir);
-    ensure_cargo_project(&workdir);
-    println!("Running Groot game in '{}' ...", workdir.display());
-    let status = Command::new("cargo")
-        .current_dir(&workdir)
-        .arg("run")
-        .status()
-        .unwrap_or_else(|e| {
-            eprintln!("Error: failed to launch cargo: {e}");
-            std::process::exit(1);
-        });
-    std::process::exit(status.code().unwrap_or(0));
-}
-
-fn cmd_build() {
+fn cmd_run(args: &[String]) {
     let workdir = resolve_workdir(None);
     ensure_cargo_project(&workdir);
-    println!("Building Groot release bundle in '{}' ...", workdir.display());
-    let status = Command::new("cargo")
-        .current_dir(&workdir)
-        .arg("build")
-        .arg("--release")
-        .status()
-        .unwrap_or_else(|e| {
-            eprintln!("Error: failed to launch cargo: {e}");
-            std::process::exit(1);
-        });
-    std::process::exit(status.code().unwrap_or(0));
+
+    let target = parse_target(args);
+    match target {
+        "web" => {
+            println!("Running Groot WebAssembly server via trunk in '{}' ...", workdir.display());
+            let status = Command::new("trunk")
+                .current_dir(&workdir)
+                .arg("serve")
+                .status()
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "Error: failed to launch trunk: {e}. Install via 'cargo install trunk'"
+                    );
+                    std::process::exit(1);
+                });
+            std::process::exit(status.code().unwrap_or(0));
+        }
+        "android" => {
+            println!("Deploying and running Groot APK on Android device...");
+            let status = Command::new("cargo")
+                .current_dir(&workdir)
+                .args(["apk", "run", "--target", "aarch64-linux-android"])
+                .status()
+                .unwrap_or_else(|e| {
+                    eprintln!(
+                        "Error: failed to launch cargo-apk: {e}. Install via 'cargo install cargo-apk'"
+                    );
+                    std::process::exit(1);
+                });
+            std::process::exit(status.code().unwrap_or(0));
+        }
+        "desktop" => {
+            println!("Running Desktop Groot game in '{}' ...", workdir.display());
+            let status = Command::new("cargo")
+                .current_dir(&workdir)
+                .arg("run")
+                .status()
+                .unwrap_or_else(|e| {
+                    eprintln!("Error: failed to launch cargo: {e}");
+                    std::process::exit(1);
+                });
+            std::process::exit(status.code().unwrap_or(0));
+        }
+        other => {
+            eprintln!("Error: unknown target '{other}'. Use desktop, web, or android.");
+            std::process::exit(2);
+        }
+    }
+}
+
+fn cmd_build(args: &[String]) {
+    let workdir = resolve_workdir(None);
+    ensure_cargo_project(&workdir);
+
+    let target = parse_target(args);
+    match target {
+        "web" => {
+            println!("Building WebAssembly release bundle via trunk...");
+            let status = Command::new("trunk")
+                .current_dir(&workdir)
+                .args(["build", "--release"])
+                .status()
+                .unwrap_or_else(|e| {
+                    eprintln!("Error: failed to launch trunk: {e}");
+                    std::process::exit(1);
+                });
+            std::process::exit(status.code().unwrap_or(0));
+        }
+        "android" => {
+            println!("Building Android ARM64 APK bundle...");
+            let status = Command::new("cargo")
+                .current_dir(&workdir)
+                .args(["apk", "build", "--target", "aarch64-linux-android", "--release"])
+                .status()
+                .unwrap_or_else(|e| {
+                    eprintln!("Error: failed to launch cargo-apk: {e}");
+                    std::process::exit(1);
+                });
+            std::process::exit(status.code().unwrap_or(0));
+        }
+        "desktop" => {
+            println!("Building Desktop release binary in '{}' ...", workdir.display());
+            let status = Command::new("cargo")
+                .current_dir(&workdir)
+                .args(["build", "--release"])
+                .status()
+                .unwrap_or_else(|e| {
+                    eprintln!("Error: failed to launch cargo: {e}");
+                    std::process::exit(1);
+                });
+            std::process::exit(status.code().unwrap_or(0));
+        }
+        other => {
+            eprintln!("Error: unknown target '{other}'. Use desktop, web, or android.");
+            std::process::exit(2);
+        }
+    }
 }
 
 fn cmd_plugin(args: &[String]) {
@@ -365,11 +446,11 @@ fn cmd_info() {
     println!("==================================================");
     println!("  GROOT ENGINE INFO");
     println!("==================================================");
-    println!("  groot version : {VERSION}");
-    println!("  cargo package     : groot");
-    println!("  cwd               : {}", std::env::current_dir().unwrap_or_default().display());
-    println!("  assets dir        : assets/");
-    println!("  project config    : assets/config.ron");
+    println!("  groot version   : {VERSION}");
+    println!("  supported targets: desktop, web (wasm32), android (arm64)");
+    println!("  cwd             : {}", std::env::current_dir().unwrap_or_default().display());
+    println!("  assets dir      : assets/");
+    println!("  project config  : assets/config.ron");
     println!("==================================================");
 }
 

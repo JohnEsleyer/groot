@@ -22,6 +22,7 @@ assets/scripts/*.gos        ──►  GoScript VM (Logic Hot Reloading)  ──
 - `assets/prefabs/*.prefab.ron` — 2D/3D prefabs (sprites, text, 3D PBR meshes, lights, colliders, parent-child hierarchies).
 - `assets/scenes/*.scene.ron` — scene layout, environment settings, cameras, entity initializers.
 - `src/main.rs` — initializes winit window and wgpu render context, runs main event loop.
+- `src/platform/` — platform abstraction layer (desktop event loop, WASM canvas, Android entry).
 - `src/render/` — pure wgpu rendering engine (3D meshes, 2D sprites, text, gizmos).
 - `src/ecs/` — hecs-based ECS components and queries.
 - `src/script/` — GoScript VM host, input tracking, script execution.
@@ -94,6 +95,25 @@ cargo run --bin groot -- build
 cargo run --bin groot -- plugin list
 cargo run --bin groot -- plugin add audio
 cargo run --bin groot -- plugin remove audio
+```
+
+### Multi-Platform Targets
+
+Desktop, WASM, and Android builds share a single `--target` flag on `run`
+and `build` (defaults to `desktop`):
+
+```bash
+# Desktop (current host)
+groot run
+groot build --target desktop
+
+# WebAssembly bundle (requires `cargo install trunk`)
+groot run --target web        # trunk serve (hot reload)
+groot build --target web      # trunk build --release
+
+# Android APK (requires rustup target aarch64-linux-android + cargo-apk)
+groot run --target android    # cargo apk run
+groot build --target android  # cargo apk build --release
 ```
 
 ## Run the Demo
