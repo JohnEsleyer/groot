@@ -69,6 +69,31 @@ fn main() {
     }
 }
 
+/// Verify that `cargo-apk` is installed before running Android targets.
+fn ensure_cargo_apk_installed() {
+    let check = Command::new("cargo")
+        .arg("apk")
+        .arg("--version")
+        .output();
+
+    let installed = match check {
+        Ok(output) => output.status.success(),
+        Err(_) => false,
+    };
+
+    if !installed {
+        eprintln!("Error: 'cargo-apk' is not installed on your system.");
+        eprintln!();
+        eprintln!("To build and run Android APKs with Groot, please install 'cargo-apk':");
+        eprintln!("  cargo install cargo-apk");
+        eprintln!();
+        eprintln!("Also ensure the Android Rust compilation target is installed:");
+        eprintln!("  rustup target add aarch64-linux-android");
+        eprintln!();
+        std::process::exit(1);
+    }
+}
+
 /// Extract `--target <desktop|android>` from the arg list (defaults to desktop).
 fn parse_target(args: &[String]) -> &str {
     for i in 0..args.len() {
@@ -129,9 +154,7 @@ fn select_adb_device(args: &[String]) -> Option<String> {
         return None;
     }
 
-    // 1. Check if user specified a device via `--device` or `-d`
     if let Some(user_arg) = parse_device_arg(args) {
-        // Option A: Numeric 1-based index
         if let Ok(idx) = user_arg.parse::<usize>() {
             if idx >= 1 && idx <= devices.len() {
                 let dev = &devices[idx - 1];
@@ -139,7 +162,6 @@ fn select_adb_device(args: &[String]) -> Option<String> {
                 return Some(dev.serial.clone());
             }
         }
-        // Option B: Serial or model string match
         for dev in &devices {
             if dev.serial.eq_ignore_ascii_case(&user_arg)
                 || dev.model.eq_ignore_ascii_case(&user_arg)
@@ -148,19 +170,16 @@ fn select_adb_device(args: &[String]) -> Option<String> {
                 return Some(dev.serial.clone());
             }
         }
-        // Option C: Fallback to passing user string directly
         println!("Using specified device serial: {user_arg}");
         return Some(user_arg);
     }
 
-    // 2. Single device connected: auto-select
     if devices.len() == 1 {
         let dev = &devices[0];
         println!("Targeting Android device: {} ({})", dev.model, dev.serial);
         return Some(dev.serial.clone());
     }
 
-    // 3. Multiple devices connected: prompt interactively
     println!("\nMultiple Android devices detected:");
     for (i, dev) in devices.iter().enumerate() {
         println!("  [{}] {} ({})", i + 1, dev.model, dev.serial);
@@ -395,6 +414,7 @@ fn cmd_run(args: &[String]) {
     let target = parse_target(args);
     match target {
         "android" => {
+            ensure_cargo_apk_installed();
             let device_serial = select_adb_device(args);
             println!("Deploying and running Groot APK on Android device...");
             let mut cmd = Command::new("cargo");
@@ -405,9 +425,7 @@ fn cmd_run(args: &[String]) {
             cmd.args(["apk", "run", "--target", "aarch64-linux-android"]);
 
             let status = cmd.status().unwrap_or_else(|e| {
-                eprintln!(
-                    "Error: failed to launch cargo-apk: {e}. Install via 'cargo install cargo-apk'"
-                );
+                eprintln!("Error: failed to launch cargo-apk: {e}");
                 std::process::exit(1);
             });
             std::process::exit(status.code().unwrap_or(0));
@@ -438,6 +456,7 @@ fn cmd_build(args: &[String]) {
     let target = parse_target(args);
     match target {
         "android" => {
+            ensure_cargo_apk_installed();
             println!("Building Android ARM64 APK bundle...");
             let status = Command::new("cargo")
                 .current_dir(&workdir)
