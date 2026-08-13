@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -19,6 +20,12 @@ struct PluginEntry {
     _path: String,
 }
 
+#[derive(Debug, Clone)]
+struct AdbDevice {
+    serial: String,
+    model: String,
+}
+
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn print_help() {
@@ -28,12 +35,12 @@ fn print_help() {
     println!("Usage: groot <command> [args]");
     println!();
     println!("Commands:");
-    println!("  new <name>            - Scaffold a new Groot project");
-    println!("  run [--target <t>]    - Run Groot game (targets: desktop, android)");
-    println!("  build [--target <t>]  - Build release bundle (targets: desktop, android)");
-    println!("  plugin                - Manage plugins (list, add, remove)");
-    println!("  info                  - Print engine version and workspace info");
-    println!("  help                  - Show this help");
+    println!("  new <name>                        - Scaffold a new Groot project");
+    println!("  run [--target <t>] [--device <d>] - Run Groot game (targets: desktop, android; device: serial or index)");
+    println!("  build [--target <t>]              - Build release bundle (targets: desktop, android)");
+    println!("  plugin                            - Manage plugins (list, add, remove)");
+    println!("  info                              - Print engine version and workspace info");
+    println!("  help                              - Show this help");
     println!("==================================================");
 }
 
@@ -70,6 +77,117 @@ fn parse_target(args: &[String]) -> &str {
         }
     }
     "desktop"
+}
+
+/// Extract `--device <serial_or_index>` or `-d <serial_or_index>` from the arg list.
+fn parse_device_arg(args: &[String]) -> Option<String> {
+    for i in 0..args.len() {
+        if (args[i] == "--device" || args[i] == "-d") && i + 1 < args.len() {
+            return Some(args[i + 1].clone());
+        }
+    }
+    None
+}
+
+/// Query connected online devices from `adb devices -l`.
+fn get_adb_devices() -> Vec<AdbDevice> {
+    let output = match Command::new("adb").args(["devices", "-l"]).output() {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).to_string(),
+        _ => return Vec::new(),
+    };
+
+    let mut devices = Vec::new();
+    for line in output.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with("List of devices attached") {
+            continue;
+        }
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() >= 2 && parts[1] == "device" {
+            let serial = parts[0].to_string();
+            let mut model = String::new();
+            for part in &parts[2..] {
+                if let Some(m) = part.strip_prefix("model:") {
+                    model = m.to_string();
+                }
+            }
+            if model.is_empty() {
+                model = serial.clone();
+            }
+            devices.push(AdbDevice { serial, model });
+        }
+    }
+    devices
+}
+
+/// Interactively or programmatically select an Android ADB device.
+fn select_adb_device(args: &[String]) -> Option<String> {
+    let devices = get_adb_devices();
+
+    if devices.is_empty() {
+        println!("Notice: No online Android devices detected via `adb devices`.");
+        return None;
+    }
+
+    // 1. Check if user specified a device via `--device` or `-d`
+    if let Some(user_arg) = parse_device_arg(args) {
+        // Option A: Numeric 1-based index
+        if let Ok(idx) = user_arg.parse::<usize>() {
+            if idx >= 1 && idx <= devices.len() {
+                let dev = &devices[idx - 1];
+                println!("Using Android device #{idx}: {} ({})", dev.model, dev.serial);
+                return Some(dev.serial.clone());
+            }
+        }
+        // Option B: Serial or model string match
+        for dev in &devices {
+            if dev.serial.eq_ignore_ascii_case(&user_arg)
+                || dev.model.eq_ignore_ascii_case(&user_arg)
+            {
+                println!("Using Android device: {} ({})", dev.model, dev.serial);
+                return Some(dev.serial.clone());
+            }
+        }
+        // Option C: Fallback to passing user string directly
+        println!("Using specified device serial: {user_arg}");
+        return Some(user_arg);
+    }
+
+    // 2. Single device connected: auto-select
+    if devices.len() == 1 {
+        let dev = &devices[0];
+        println!("Targeting Android device: {} ({})", dev.model, dev.serial);
+        return Some(dev.serial.clone());
+    }
+
+    // 3. Multiple devices connected: prompt interactively
+    println!("\nMultiple Android devices detected:");
+    for (i, dev) in devices.iter().enumerate() {
+        println!("  [{}] {} ({})", i + 1, dev.model, dev.serial);
+    }
+    print!("Select device [1-{}, default 1]: ", devices.len());
+    let _ = io::stdout().flush();
+
+    let mut input = String::new();
+    if io::stdin().read_line(&mut input).is_ok() {
+        let trimmed = input.trim();
+        if trimmed.is_empty() {
+            let dev = &devices[0];
+            println!("Defaulting to device #1: {} ({})", dev.model, dev.serial);
+            return Some(dev.serial.clone());
+        }
+        if let Ok(choice) = trimmed.parse::<usize>() {
+            if choice >= 1 && choice <= devices.len() {
+                let dev = &devices[choice - 1];
+                println!("Selected device #{choice}: {} ({})", dev.model, dev.serial);
+                return Some(dev.serial.clone());
+            }
+        }
+    }
+
+    let dev = &devices[0];
+    println!("Falling back to device #1: {} ({})", dev.model, dev.serial);
+    Some(dev.serial.clone())
 }
 
 fn cmd_new(args: &[String]) {
@@ -277,17 +395,21 @@ fn cmd_run(args: &[String]) {
     let target = parse_target(args);
     match target {
         "android" => {
+            let device_serial = select_adb_device(args);
             println!("Deploying and running Groot APK on Android device...");
-            let status = Command::new("cargo")
-                .current_dir(&workdir)
-                .args(["apk", "run", "--target", "aarch64-linux-android"])
-                .status()
-                .unwrap_or_else(|e| {
-                    eprintln!(
-                        "Error: failed to launch cargo-apk: {e}. Install via 'cargo install cargo-apk'"
-                    );
-                    std::process::exit(1);
-                });
+            let mut cmd = Command::new("cargo");
+            cmd.current_dir(&workdir);
+            if let Some(serial) = device_serial {
+                cmd.env("ANDROID_SERIAL", serial);
+            }
+            cmd.args(["apk", "run", "--target", "aarch64-linux-android"]);
+
+            let status = cmd.status().unwrap_or_else(|e| {
+                eprintln!(
+                    "Error: failed to launch cargo-apk: {e}. Install via 'cargo install cargo-apk'"
+                );
+                std::process::exit(1);
+            });
             std::process::exit(status.code().unwrap_or(0));
         }
         "desktop" => {
@@ -389,7 +511,6 @@ fn cmd_plugin(args: &[String]) {
                 println!("Plugin 'groot-plugin-{name}' is already installed.");
                 return;
             }
-            // Insert dependency after [dependencies] section header, before [profile.dev]
             if let Some(pos) = cargo_toml.find("[profile.dev]") {
                 cargo_toml.insert_str(pos, &format!("{dep_line}\n\n"));
             } else {
