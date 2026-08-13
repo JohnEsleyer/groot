@@ -455,10 +455,16 @@ fn cmd_run(args: &[String]) {
             println!("Deploying and running Groot APK on Android device...");
             let mut cmd = Command::new("cargo");
             cmd.current_dir(&workdir);
-            if let Some(serial) = device_serial {
+
+            let mut cargo_args = vec!["apk", "run", "--target", "aarch64-linux-android", "--lib"];
+
+            if let Some(ref serial) = device_serial {
                 cmd.env("ANDROID_SERIAL", serial);
+                cargo_args.push("--device");
+                cargo_args.push(serial);
             }
-            cmd.args(["apk", "run", "--target", "aarch64-linux-android", "--lib"]);
+
+            cmd.args(cargo_args);
 
             let status = cmd.status().unwrap_or_else(|e| {
                 eprintln!("Error: failed to launch cargo-apk: {e}");
