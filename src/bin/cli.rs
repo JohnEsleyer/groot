@@ -276,6 +276,11 @@ name = "{name}"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "{name}"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 groot = {{ git = "https://github.com/JohnEsleyer/groot" }}
 
@@ -283,6 +288,11 @@ groot = {{ git = "https://github.com/JohnEsleyer/groot" }}
 opt-level = 1
 "#
         ),
+    );
+
+    write_or_die(
+        project_path.join("src/lib.rs"),
+        r#"pub use groot::*;"#.to_string(),
     );
 
     write_or_die(
@@ -420,6 +430,7 @@ Thumbs.db
     println!("Project '{name}' created successfully!");
     println!();
     println!("  {}/Cargo.toml", project_path.display());
+    println!("  {}/src/lib.rs", project_path.display());
     println!("  {}/src/main.rs", project_path.display());
     println!("  {}/assets/config.ron", project_path.display());
     println!("  {}/assets/prefabs/player.prefab.ron", project_path.display());
@@ -447,12 +458,7 @@ fn cmd_run(args: &[String]) {
             if let Some(serial) = device_serial {
                 cmd.env("ANDROID_SERIAL", serial);
             }
-            let mut cargo_args = vec!["apk", "run", "--target", "aarch64-linux-android"];
-            if let Some(ref bin) = bin_target {
-                cargo_args.push("--bin");
-                cargo_args.push(bin);
-            }
-            cmd.args(cargo_args);
+            cmd.args(["apk", "run", "--target", "aarch64-linux-android", "--lib"]);
 
             let status = cmd.status().unwrap_or_else(|e| {
                 eprintln!("Error: failed to launch cargo-apk: {e}");
@@ -497,13 +503,14 @@ fn cmd_build(args: &[String]) {
             println!("Building Android ARM64 APK bundle...");
             let mut cmd = Command::new("cargo");
             cmd.current_dir(&workdir);
-            let mut cargo_args =
-                vec!["apk", "build", "--target", "aarch64-linux-android", "--release"];
-            if let Some(ref bin) = bin_target {
-                cargo_args.push("--bin");
-                cargo_args.push(bin);
-            }
-            cmd.args(cargo_args);
+            cmd.args([
+                "apk",
+                "build",
+                "--target",
+                "aarch64-linux-android",
+                "--release",
+                "--lib",
+            ]);
 
             let status = cmd.status().unwrap_or_else(|e| {
                 eprintln!("Error: failed to launch cargo-apk: {e}");
