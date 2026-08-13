@@ -1,14 +1,15 @@
 (
     name: "ceiling",
     transform: (
-        position: (0.0, 5.2, 0.0),
+        position: (0.0, 5.7, 0.0),
         rotation: (0.0, 0.0, 0.0),
-        scale: (22.0, 0.8, 1.0),
+        scale: (1.0, 1.0, 1.0),
     ),
     visual: Some(Sprite(
-        size: (22.0, 0.8),
+        size: (22.0, 1.8),
         color: Rgba(1.0, 1.0, 1.0, 1.0),
-        texture: Some("assets/textures/ground.png"),
+        texture: Some("assets/textures/ceiling.png"),
+        layer: 100,
     )),
-    collider: Some(Box2D(width: 22.0, height: 0.8)),
+    collider: Some(Box2D(width: 22.0, height: 1.8)),
 )

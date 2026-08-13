@@ -17,6 +17,19 @@ var self = BirdController{
 }
 
 func OnUpdate(dt float64) {
+	if groot.IsGameOver() {
+		groot.Log("[GROOT VM] GAME OVER! Resetting bird...")
+		self.VelocityY = 0.0
+		self.Score = 0
+		self.IsDead = false
+		self.AutoBot = true
+		groot.DespawnByTag("PipeTop")
+		groot.DespawnByTag("PipeBottom")
+		groot.SetSelfPosition(-3.0, 0.0, 0.0)
+		groot.SetGameOver(false)
+		return
+	}
+
 	var pos = groot.GetSelfPosition()
 
 	if groot.IsKeyPressed("Space") || groot.IsKeyPressed("KeyW") || groot.IsKeyPressed("ArrowUp") || groot.IsMousePressed(0) {
@@ -28,7 +41,23 @@ func OnUpdate(dt float64) {
 	}
 
 	if self.AutoBot {
-		if pos[1] < -0.5 && self.VelocityY <= 0 {
+		var targetY = 0.0
+		var nearestPipeX = 10000.0
+		var tops = groot.GetTagPositions("PipeTop")
+		var i = 0
+		for i < len(tops) {
+			var pipeX = tops[i][0]
+			if pipeX > pos[0] && pipeX < nearestPipeX {
+				nearestPipeX = pipeX
+				// Gap center = top pipe center - (half gap 1.2 + half pipe 3.5)
+				targetY = tops[i][1] - 4.7
+			}
+			i = i + 1
+		}
+		if nearestPipeX == 10000.0 {
+			targetY = 0.0
+		}
+		if pos[1] < targetY && self.VelocityY <= 0 {
 			self.VelocityY = self.JumpForce
 		}
 	}
@@ -40,11 +69,10 @@ func OnUpdate(dt float64) {
 		newY = 4.6
 		self.VelocityY = 0.0
 	}
-	if newY < -4.6 {
-		groot.Log("[GROOT VM] Bird crashed! Resetting game state...")
-		newY = 0.0
-		self.VelocityY = 0.0
-		self.Score = 0
+	if newY < -4.5 {
+		groot.Warn("[GROOT VM] Bird hit ground! Game over...")
+		groot.SetGameOver(true)
+		return
 	}
 
 	groot.SetSelfPosition(pos[0], newY, pos[2])
@@ -52,5 +80,5 @@ func OnUpdate(dt float64) {
 	var tilt = groot.Clamp(self.VelocityY*6.0, -35.0, 40.0)
 	groot.SetSelfRotation3D(0.0, 0.0, tilt)
 
-	groot.SetSelfCollider(0.8, 0.8, 0.8)
+	groot.SetSelfCollider(1.0, 1.0, 1.0)
 }

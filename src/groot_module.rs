@@ -1,5 +1,8 @@
 use goscript::value::Value;
 use goscript::vm::VirtualMachine;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static GAME_OVER: AtomicBool = AtomicBool::new(false);
 
 /// Stateless utility bindings for the Groot engine.
 ///
@@ -29,6 +32,23 @@ impl GrootModuleExt for VirtualMachine {
             let msg: Vec<String> = args.iter().map(|a| a.to_string()).collect();
             log::error!("[GROOT ERROR]: {}", msg.join(" "));
             Value::Nil
+        });
+
+        // --- Game State ---------------------------------------------------------
+        self.register_fn("groot.SetGameOver", |args| {
+            let on = args
+                .first()
+                .map(|v| match v {
+                    Value::Bool(b) => *b,
+                    _ => false,
+                })
+                .unwrap_or(false);
+            GAME_OVER.store(on, Ordering::Relaxed);
+            Value::Nil
+        });
+
+        self.register_fn("groot.IsGameOver", |_| {
+            Value::Bool(GAME_OVER.load(Ordering::Relaxed))
         });
 
         // --- Math & Geometry ---------------------------------------------------

@@ -135,7 +135,9 @@ so `.gos` and `.prefab.ron` edits hot-reload while developing.
 cargo run
 ```
 
-A 3D demo scene starts up featuring a player cube with child lighting controlled via WASD/Arrows and Space, a continuously rotating golden 3D cube, and a 2D HUD text overlay. Save any `.gos` or `.prefab.ron` file to see live hot reloading!
+The **Flappy Groot** demo starts up: a neon 2D side-scroller where you flap a bird through pipe gaps, avoiding solid ground and ceiling. Save any `.gos` or `.prefab.ron` file to see live hot reloading!
+
+2D sprites are drawn back-to-front by their `layer` field (background → pipes → ground/ceiling → bird) and scaled to their world-space size from the prefab's `size`. Sprite textures (bird, pipes, ground, ceiling, grid) are generated procedurally at startup and cached as PNG bind groups.
 
 ## Writing scripts
 

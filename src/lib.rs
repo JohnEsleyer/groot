@@ -279,19 +279,34 @@ pub async fn run_game_with_event_loop(event_loop: EventLoop<()>, config_path: &s
                             }
                         }
 
-                        let model_bind_groups_2d: Vec<(wgpu::BindGroup, Option<String>)> = st
+                        let mut model_bind_groups_2d: Vec<(
+                            i32,
+                            wgpu::BindGroup,
+                            Option<String>,
+                        )> = st
                             .world
                             .query_mut::<(&Transform3D, &Visual2D)>()
                             .into_iter()
                             .map(|(_id, (tf, vis))| {
+                                // Quad mesh is 1x1; scale it to the sprite's world-space size.
+                                let size_matrix = glam::Mat4::from_scale(glam::Vec3::new(
+                                    vis.size.0,
+                                    vis.size.1,
+                                    1.0,
+                                ));
+                                let final_transform = tf.matrix() * size_matrix;
                                 let (bg, _buf) = st.pipeline_2d.create_model_bind_group(
                                     &st.render_ctx.device,
-                                    tf.matrix(),
+                                    final_transform,
                                     vis.color,
                                 );
-                                (bg, vis.texture_path.clone())
+                                (vis.layer, bg, vis.texture_path.clone())
                             })
                             .collect();
+
+                        // Draw lower layers first so background sits behind sprites
+                        // and ground/ceiling can cover pipe bottoms.
+                        model_bind_groups_2d.sort_by_key(|(layer, _, _)| *layer);
 
                         {
                             let mut render_pass =
@@ -348,7 +363,7 @@ pub async fn run_game_with_event_loop(event_loop: EventLoop<()>, config_path: &s
                             render_pass.set_pipeline(&st.pipeline_2d.render_pipeline);
                             render_pass.set_bind_group(0, &st.camera_bind_group_2d, &[]);
 
-                            for (bind_group, tex_path) in &model_bind_groups_2d {
+                            for (_layer, bind_group, tex_path) in &model_bind_groups_2d {
                                 render_pass.set_bind_group(1, bind_group, &[]);
                                 render_pass.set_bind_group(2, st.texture_manager.get_or_default(tex_path.as_deref()), &[]);
                                 render_pass.set_vertex_buffer(

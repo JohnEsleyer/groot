@@ -46,10 +46,11 @@ pub fn spawn_scene(world: &mut World, scene_path: &str) {
             });
 
             let visual_2d = prefab.visual.as_ref().and_then(|v| match v {
-                VisualConfig::Sprite { size, color, texture } => Some(Visual2D {
+                VisualConfig::Sprite { size, color, texture, layer } => Some(Visual2D {
                     size: *size,
                     color: color.to_array(),
                     texture_path: texture.clone(),
+                    layer: *layer,
                 }),
                 _ => None,
             });

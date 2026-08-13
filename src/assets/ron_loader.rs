@@ -141,6 +141,8 @@ pub enum VisualConfig {
         color: RgbaColor,
         #[serde(default)]
         texture: Option<String>,
+        #[serde(default)]
+        layer: i32,
     },
     MeshPbr {
         shape: ShapeConfig,

@@ -58,6 +58,7 @@ pub struct Visual2D {
     pub size: (f32, f32),
     pub color: [f32; 4],
     pub texture_path: Option<String>,
+    pub layer: i32,
 }
 
 #[derive(Debug, Clone)]

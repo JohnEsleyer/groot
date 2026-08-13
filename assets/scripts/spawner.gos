@@ -6,7 +6,7 @@ type Spawner struct {
 
 var self = Spawner{
 	Timer:    0.0,
-	Interval: 2.2,
+	Interval: 2.0,
 	Seed:     1.5,
 }
 
@@ -17,13 +17,17 @@ func OnUpdate(dt float64) {
 		self.Timer = 0.0
 		self.Seed = self.Seed + 1.73
 
-		// Pseudo-random gap offset calculation between -2.0 and +2.0
-		var rawOffset = (self.Seed - float64(int(self.Seed)))*4.0 - 2.0
-		var gapY = groot.Clamp(rawOffset, -2.0, 2.0)
+		// Pseudo-random gap center between Y = -1.5 and Y = 1.5
+		var rawOffset = (self.Seed - float64(int(self.Seed)))*3.0 - 1.5
+		var gapY = groot.Clamp(rawOffset, -1.5, 1.5)
 
-		var gapSize = 1.8
-		var topY = gapY + (3.5 + gapSize)
-		var bottomY = gapY - (3.5 + gapSize)
+		var gapSize = 2.4        // Vertical opening for bird
+		var pipeHalfHeight = 3.5 // Half of pipe length (7.0 / 2)
+
+		// Top pipe center = gapY + half_gap + half_pipe_length
+		var topY = gapY + (gapSize * 0.5) + pipeHalfHeight
+		// Bottom pipe center = gapY - half_gap - half_pipe_length
+		var bottomY = gapY - (gapSize * 0.5) - pipeHalfHeight
 
 		groot.SpawnPrefab("assets/prefabs/pipe_top.prefab.ron", 9.0, topY, 0.0, "PipeTop")
 		groot.SpawnPrefab("assets/prefabs/pipe_bottom.prefab.ron", 9.0, bottomY, 0.0, "PipeBottom")

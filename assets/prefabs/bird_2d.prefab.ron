@@ -4,12 +4,13 @@
     transform: (
         position: (-3.0, 0.0, 0.0),
         rotation: (0.0, 0.0, 0.0),
-        scale: (1.2, 1.2, 1.2),
+        scale: (1.0, 1.0, 1.0),
     ),
     visual: Some(Sprite(
         size: (1.2, 1.2),
         color: Rgba(1.0, 1.0, 1.0, 1.0),
         texture: Some("assets/textures/bird.png"),
+        layer: 10,
     )),
     collider: Some(Box2D(width: 1.0, height: 1.0)),
 )

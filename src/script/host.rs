@@ -33,6 +33,7 @@ thread_local! {
     static CURRENT_ENTITY: Cell<u32> = const { Cell::new(0) };
     static CURRENT_STATE: RefCell<EntityState> = RefCell::new(EntityState::default());
     static ENTITY_POSITIONS: RefCell<HashMap<u32, (f32, f32, f32)>> = RefCell::new(HashMap::new());
+    static TAG_POSITIONS: RefCell<HashMap<String, Vec<(f32, f32, f32)>>> = RefCell::new(HashMap::new());
 }
 
 #[derive(Clone, Debug)]
@@ -41,6 +42,8 @@ pub enum SpawnRequest {
 }
 
 static SPAWN_REQUESTS: Mutex<Vec<SpawnRequest>> = Mutex::new(Vec::new());
+static DESPAWN_TAGS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+static NEXT_ENTITY_ID: Mutex<u32> = Mutex::new(20000);
 
 /// Cached metadata for a loaded script — tracks which lifecycle hooks are defined.
 #[derive(Debug, Clone, Default)]
@@ -213,6 +216,23 @@ impl GrootScriptHost {
                     }
                 });
 
+                vm.register_fn("groot.GetTagPositions", |args| {
+                    let tag = args.first().and_then(|v| v.as_string()).unwrap_or("").to_string();
+                    let positions = TAG_POSITIONS.with(|map| map.borrow().get(&tag).cloned());
+                    let values: Vec<Value> = positions
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|(x, y, z)| {
+                            Value::Slice(Rc::new(RefCell::new(vec![
+                                Value::Float(x as f64),
+                                Value::Float(y as f64),
+                                Value::Float(z as f64),
+                            ])))
+                        })
+                        .collect();
+                    Value::Slice(Rc::new(RefCell::new(values)))
+                });
+
                 vm.register_fn("groot.SetSelfCollider", |args| {
                     let w = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
                     let h = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
@@ -229,6 +249,14 @@ impl GrootScriptHost {
 
                 vm.register_fn("groot.DestroySelf", |_| {
                     CURRENT_STATE.with(|st| st.borrow_mut().destroy_requested = true);
+                    Value::Nil
+                });
+
+                vm.register_fn("groot.DespawnByTag", |args| {
+                    let tag = args.first().and_then(|v| v.as_string()).unwrap_or("").to_string();
+                    if let Ok(mut tags) = DESPAWN_TAGS.lock() {
+                        tags.push(tag);
+                    }
                     Value::Nil
                 });
 
@@ -281,6 +309,16 @@ pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
         map.clear();
         for (_entity, (comp, tf)) in world.query_mut::<(&GoScriptComponent, &Transform3D)>() {
             map.insert(comp.entity_id, (tf.position.x, tf.position.y, tf.position.z));
+        }
+    });
+
+    TAG_POSITIONS.with(|snapshot| {
+        let mut map = snapshot.borrow_mut();
+        map.clear();
+        for (_entity, (comp, tf)) in world.query_mut::<(&GoScriptComponent, &Transform3D)>() {
+            map.entry(comp.tag.clone())
+                .or_default()
+                .push((tf.position.x, tf.position.y, tf.position.z));
         }
     });
 
@@ -350,12 +388,36 @@ pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
         let _ = world.despawn(e);
     }
 
+    if let Ok(mut tags) = DESPAWN_TAGS.lock() {
+        for tag in tags.drain(..) {
+            let ids: Vec<_> = world
+                .query::<&GoScriptComponent>()
+                .iter()
+                .filter(|(_e, comp)| comp.tag == tag)
+                .map(|(e, _)| e)
+                .collect();
+            for id in ids {
+                let _ = world.despawn(id);
+            }
+        }
+    }
+
     if let Ok(mut reqs) = SPAWN_REQUESTS.lock() {
         for req in reqs.drain(..) {
             match req {
                 SpawnRequest::Prefab { path, x, y, z, tag } => {
                     if let Some(prefab) = PrefabConfig::load(&path) {
-                        let tf = Transform3D::new(glam::Vec3::new(x, y, z), glam::Vec3::ZERO, glam::Vec3::ONE);
+                        let scale = glam::Vec3::new(
+                            prefab.transform.scale.0,
+                            prefab.transform.scale.1,
+                            prefab.transform.scale.2,
+                        );
+                        let rot = glam::Vec3::new(
+                            prefab.transform.rotation.0,
+                            prefab.transform.rotation.1,
+                            prefab.transform.rotation.2,
+                        );
+                        let tf = Transform3D::new(glam::Vec3::new(x, y, z), rot, scale);
                         let visual_3d = prefab.visual.as_ref().and_then(|v| match v {
                             VisualConfig::MeshPbr { shape, material } => {
                                 let shape = match shape {
@@ -372,17 +434,25 @@ pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
                             _ => None,
                         });
                         let visual_2d = prefab.visual.as_ref().and_then(|v| match v {
-                            VisualConfig::Sprite { size, color, texture } => Some(Visual2D {
+                            VisualConfig::Sprite { size, color, texture, layer } => Some(Visual2D {
                                 size: *size,
                                 color: color.to_array(),
                                 texture_path: texture.clone(),
+                                layer: *layer,
                             }),
                             _ => None,
                         });
 
                         let script = prefab.script.map(|s| GoScriptComponent {
                             script_path: s,
-                            entity_id: 20000,
+                            entity_id: NEXT_ENTITY_ID
+                                .lock()
+                                .map(|mut id| {
+                                    let cur = *id;
+                                    *id += 1;
+                                    cur
+                                })
+                                .unwrap_or(20000),
                             tag,
                         });
                         let collider = prefab.collider.unwrap_or_default();

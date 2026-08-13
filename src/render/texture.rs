@@ -102,6 +102,21 @@ impl TextureManager {
         );
         cached_bind_groups.insert("assets/textures/ground.png".to_string(), ground_bg);
 
+        // 3b. Neon Ceiling Sprite ("assets/textures/ceiling.png") - vertical
+        // flip of the ground so the neon line sits at the playable edge.
+        let ceiling_rgba = generate_ceiling_rgba(256, 32);
+        let ceiling_bg = Self::create_bind_group_from_rgba(
+            device,
+            queue,
+            &bind_group_layout,
+            &sampler,
+            256,
+            32,
+            &ceiling_rgba,
+            "Neon Ceiling Texture",
+        );
+        cached_bind_groups.insert("assets/textures/ceiling.png".to_string(), ceiling_bg);
+
         // 4. Faint neon grid background ("assets/textures/grid.png")
         let grid_rgba = generate_grid_rgba(256, 144);
         let grid_bg = Self::create_bind_group_from_rgba(
@@ -360,17 +375,18 @@ fn generate_bird_rgba(w: usize, h: usize) -> Vec<u8> {
 /// `#0a140d` body with a `#00f076` border and green glow.
 fn generate_pipe_rgba(w: usize, h: usize) -> Vec<u8> {
     let mut buf = vec![0u8; w * h * 4];
-    let border = 0.06;
-    let glow_band = 0.14;
+    let border_px = 3usize;
+    let glow_px = 9usize;
 
     for y in 0..h {
         for x in 0..w {
             let idx = (y * w + x) * 4;
-            let fx = x as f32 / w as f32;
-            let fy = y as f32 / h as f32;
 
-            let in_border = fx < border || fx > 1.0 - border || fy < border || fy > 1.0 - border;
-            if in_border {
+            let dx = x.min(w - 1 - x);
+            let dy = y.min(h - 1 - y);
+            let edge_dist = dx.min(dy);
+
+            if edge_dist < border_px {
                 buf[idx] = 0;
                 buf[idx + 1] = 240;
                 buf[idx + 2] = 118;
@@ -378,13 +394,8 @@ fn generate_pipe_rgba(w: usize, h: usize) -> Vec<u8> {
                 continue;
             }
 
-            let in_glow = fx < border + glow_band
-                || fx > 1.0 - border - glow_band
-                || fy < border + glow_band
-                || fy > 1.0 - border - glow_band;
-            if in_glow {
-                let dist = ((fx.min(1.0 - fx)) - border) / glow_band;
-                let glow = (1.0 - dist).clamp(0.0, 1.0);
+            if edge_dist < border_px + glow_px {
+                let glow = 1.0 - ((edge_dist - border_px) as f32 / glow_px as f32);
                 buf[idx] = 0;
                 buf[idx + 1] = 240;
                 buf[idx + 2] = 118;
@@ -392,7 +403,7 @@ fn generate_pipe_rgba(w: usize, h: usize) -> Vec<u8> {
                 continue;
             }
 
-            // Dark pipe body (#0a140d).
+            // Solid dark pipe body (#0a140d).
             buf[idx] = 10;
             buf[idx + 1] = 20;
             buf[idx + 2] = 13;
@@ -403,7 +414,9 @@ fn generate_pipe_rgba(w: usize, h: usize) -> Vec<u8> {
 }
 
 /// Generates neon ground: a bright `#00f076` glowing top line over a dark
-/// slate base.
+/// slate base. The neon line occupies the top `line_frac` of the texture so it
+/// stays thin (in world units) even when the quad is stretched to cover the
+/// whole screen edge.
 fn generate_ground_rgba(w: usize, h: usize) -> Vec<u8> {
     let mut buf = vec![0u8; w * h * 4];
     for y in 0..h {
@@ -412,24 +425,56 @@ fn generate_ground_rgba(w: usize, h: usize) -> Vec<u8> {
             let fy = y as f32 / h as f32;
 
             // Bright glowing top line.
-            if fy < 0.18 {
+            if fy < 0.06 {
                 buf[idx] = 0;
                 buf[idx + 1] = 230;
                 buf[idx + 2] = 118;
                 buf[idx + 3] = 255;
-            } else if fy < 0.30 {
-                // soft glow falloff
-                let glow = (0.30 - fy) / 0.12;
+            } else if fy < 0.12 {
+                // soft glow falloff (fully opaque)
                 buf[idx] = 0;
                 buf[idx + 1] = 240;
                 buf[idx + 2] = 118;
-                buf[idx + 3] = (40.0 * glow) as u8;
+                buf[idx + 3] = 255;
             } else {
-                // Dark slate base
+                // Dark slate base (fully opaque)
                 buf[idx] = 14;
                 buf[idx + 1] = 20;
                 buf[idx + 2] = 28;
-                buf[idx + 3] = 240;
+                buf[idx + 3] = 255;
+            }
+        }
+    }
+    buf
+}
+
+/// Generates the ceiling as a vertical flip of the ground so the neon line
+/// sits at the bottom edge (the playable boundary).
+fn generate_ceiling_rgba(w: usize, h: usize) -> Vec<u8> {
+    let mut buf = vec![0u8; w * h * 4];
+    for y in 0..h {
+        for x in 0..w {
+            let idx = (y * w + x) * 4;
+            let fy = y as f32 / h as f32;
+
+            // Bright glowing bottom line.
+            if fy > 0.94 {
+                buf[idx] = 0;
+                buf[idx + 1] = 230;
+                buf[idx + 2] = 118;
+                buf[idx + 3] = 255;
+            } else if fy > 0.88 {
+                // soft glow falloff (fully opaque)
+                buf[idx] = 0;
+                buf[idx + 1] = 240;
+                buf[idx + 2] = 118;
+                buf[idx + 3] = 255;
+            } else {
+                // Dark slate base (fully opaque)
+                buf[idx] = 14;
+                buf[idx + 1] = 20;
+                buf[idx + 2] = 28;
+                buf[idx + 3] = 255;
             }
         }
     }
@@ -493,10 +538,22 @@ mod verify_tests {
         // Ground: top line green, base dark
         let g = generate_ground_rgba(256, 32);
         let gpx = |x: usize, y: usize| (y * 256 + x) * 4;
-        let gtop = (g[gpx(128, 2) + 0], g[gpx(128, 2) + 1], g[gpx(128, 2) + 2]);
-        let gbase = (g[gpx(128, 30) + 0], g[gpx(128, 30) + 1], g[gpx(128, 30) + 2]);
+        let gtop = (g[gpx(128, 1) + 0], g[gpx(128, 1) + 1], g[gpx(128, 1) + 2]);
+        let gbase = (g[gpx(128, 30) + 0], g[gpx(128, 30) + 1], g[gpx(128, 30) + 2], g[gpx(128, 30) + 3]);
+        let gglow = g[gpx(128, 3) + 3];
         assert_eq!(gtop, (0, 230, 118));
-        assert_eq!(gbase, (14, 20, 28));
+        assert_eq!(gbase, (14, 20, 28, 255));
+        assert_eq!(gglow, 255, "ground glow must be fully opaque");
+
+        // Ceiling: bottom line green, base dark
+        let c = generate_ceiling_rgba(256, 32);
+        let cpx = |x: usize, y: usize| (y * 256 + x) * 4;
+        let cbot = (c[cpx(128, 31) + 0], c[cpx(128, 31) + 1], c[cpx(128, 31) + 2]);
+        let cbase = (c[cpx(128, 1) + 0], c[cpx(128, 1) + 1], c[cpx(128, 1) + 2], c[cpx(128, 1) + 3]);
+        let cglow = c[cpx(128, 29) + 3];
+        assert_eq!(cbot, (0, 230, 118));
+        assert_eq!(cbase, (14, 20, 28, 255));
+        assert_eq!(cglow, 255, "ceiling glow must be fully opaque");
 
         // Grid: has both transparent and faint-green pixels
         let gr = generate_grid_rgba(256, 144);

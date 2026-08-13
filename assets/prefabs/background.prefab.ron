@@ -3,12 +3,13 @@
     transform: (
         position: (0.0, 0.0, 1.0),
         rotation: (0.0, 0.0, 0.0),
-        scale: (24.0, 13.5, 1.0),
+        scale: (1.0, 1.0, 1.0),
     ),
     visual: Some(Sprite(
         size: (24.0, 13.5),
         color: Rgba(1.0, 1.0, 1.0, 1.0),
         texture: Some("assets/textures/grid.png"),
+        layer: -100,
     )),
     collider: None,
 )
