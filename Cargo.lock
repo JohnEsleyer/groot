@@ -56,34 +56,15 @@ dependencies = [
  "bitflags 2.13.1",
  "cc",
  "cesu8",
- "jni 0.21.1",
+ "jni",
  "jni-sys 0.3.1",
  "libc",
  "log",
- "ndk 0.8.0",
+ "ndk",
  "ndk-context",
- "ndk-sys 0.5.0+25.2.9519653",
+ "ndk-sys",
  "num_enum",
  "thiserror 1.0.69",
-]
-
-[[package]]
-name = "android-activity"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f2a1bb052857d5dd49572219344a7332b31b76405648eabac5bc68978251bcd"
-dependencies = [
- "android-properties",
- "bitflags 2.13.1",
- "cc",
- "jni 0.22.4",
- "libc",
- "log",
- "ndk 0.9.0",
- "ndk-context",
- "ndk-sys 0.6.0+11769913",
- "num_enum",
- "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -819,7 +800,7 @@ dependencies = [
 name = "groot"
 version = "0.1.0"
 dependencies = [
- "android-activity 0.6.1",
+ "android-activity",
  "android_logger",
  "bytemuck",
  "env_logger 0.11.11",
@@ -1007,36 +988,6 @@ dependencies = [
  "thiserror 1.0.69",
  "walkdir",
  "windows-sys 0.45.0",
-]
-
-[[package]]
-name = "jni"
-version = "0.22.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5efd9a482cf3a427f00d6b35f14332adc7902ce91efb778580e180ff90fa3498"
-dependencies = [
- "cfg-if",
- "combine",
- "jni-macros",
- "jni-sys 0.4.1",
- "log",
- "simd_cesu8",
- "thiserror 2.0.20",
- "walkdir",
- "windows-link",
-]
-
-[[package]]
-name = "jni-macros"
-version = "0.22.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a00109accc170f0bdb141fed3e393c565b6f5e072365c3bd58f5b062591560a3"
-dependencies = [
- "proc-macro2",
- "quote",
- "rustc_version",
- "simd_cesu8",
- "syn 2.0.119",
 ]
 
 [[package]]
@@ -1254,23 +1205,9 @@ dependencies = [
  "bitflags 2.13.1",
  "jni-sys 0.3.1",
  "log",
- "ndk-sys 0.5.0+25.2.9519653",
+ "ndk-sys",
  "num_enum",
  "raw-window-handle",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "ndk"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3f42e7bbe13d351b6bead8286a43aac9534b82bd3cc43e47037f012ebfd62d4"
-dependencies = [
- "bitflags 2.13.1",
- "jni-sys 0.3.1",
- "log",
- "ndk-sys 0.6.0+11769913",
- "num_enum",
  "thiserror 1.0.69",
 ]
 
@@ -1285,15 +1222,6 @@ name = "ndk-sys"
 version = "0.5.0+25.2.9519653"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8c196769dd60fd4f363e11d948139556a344e79d451aeb2fa2fd040738ef7691"
-dependencies = [
- "jni-sys 0.3.1",
-]
-
-[[package]]
-name = "ndk-sys"
-version = "0.6.0+11769913"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee6cda3051665f1fb8d9e08fc35c96d5a244fb1be711a03b71118828afc9a873"
 dependencies = [
  "jni-sys 0.3.1",
 ]
@@ -1677,15 +1605,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
-name = "rustc_version"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
-dependencies = [
- "semver",
-]
-
-[[package]]
 name = "rustix"
 version = "0.38.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1752,12 +1671,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "semver"
-version = "1.0.28"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
-
-[[package]]
 name = "serde"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1803,22 +1716,6 @@ name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
-
-[[package]]
-name = "simd_cesu8"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11031e251abf8611c80f460e19dbdeb54a66db918e49c65a7065b46ac7aec520"
-dependencies = [
- "rustc_version",
- "simdutf8",
-]
-
-[[package]]
-name = "simdutf8"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
 name = "slab"
@@ -2375,7 +2272,7 @@ dependencies = [
  "log",
  "metal",
  "naga",
- "ndk-sys 0.5.0+25.2.9519653",
+ "ndk-sys",
  "objc",
  "once_cell",
  "parking_lot",
@@ -2686,7 +2583,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d59ad965a635657faf09c8f062badd885748428933dad8e8bdd64064d92e5ca"
 dependencies = [
  "ahash",
- "android-activity 0.5.2",
+ "android-activity",
  "atomic-waker",
  "bitflags 2.13.1",
  "bytemuck",
@@ -2700,8 +2597,8 @@ dependencies = [
  "libc",
  "log",
  "memmap2",
- "ndk 0.8.0",
- "ndk-sys 0.5.0+25.2.9519653",
+ "ndk",
+ "ndk-sys",
  "objc2",
  "once_cell",
  "orbclient",
