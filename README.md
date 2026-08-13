@@ -107,9 +107,27 @@ groot run
 groot build --target desktop
 
 # Android APK (requires rustup target aarch64-linux-android + cargo-apk)
-groot run --target android    # cargo apk run
+groot run --target android    # cargo apk run (deploys to a connected device via adb)
 groot build --target android  # cargo apk build --release
 ```
+
+On Android, `groot run --target android` auto-detects connected devices with
+`adb`; if several are present it lists them and lets you pick one, or you can
+pass `--device <serial>` (or `--device <index>`) to select directly.
+
+### Android Asset Handling
+
+Assets (`assets/`) are compiled into the APK using `rust-embed` with the
+`debug-embed` feature, so games work on-device in both debug and release
+builds. On desktop debug builds, asset files are still read from disk first
+so `.gos` and `.prefab.ron` edits hot-reload while developing.
+
+### Android Requirements
+
+- `rustup target add aarch64-linux-android`
+- `cargo install cargo-apk`
+- Android SDK with platform `android-34` (or set `target_sdk_version` /
+  `min_sdk_version` under `[package.metadata.android.sdk]` in `Cargo.toml`)
 
 ## Run the Demo
 
@@ -148,3 +166,11 @@ func OnUpdate(dt float64) {
 - `serde` 1 - Serialization framework
 - `goscript` (git: `github.com/johnesleyer/goscript`) - GoScript VM
 - `groot-plugin-api` - Shared plugin trait and manager
+
+## Case Studies
+
+Engineering deep-dives from the engine's development, including the Android
+bring-up:
+
+- [001 — Android splash-screen hang: deferred GPU surface creation](docs/case-studies/001-android-splash-screen-hang.md)
+- [002 — Empty scene on Android: embedding assets into the binary](docs/case-studies/002-android-empty-scene-asset-embedding.md)
