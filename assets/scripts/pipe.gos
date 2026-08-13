@@ -1,0 +1,31 @@
+type PipeController struct {
+	Speed float64
+}
+
+var self = PipeController{
+	Speed: 3.2,
+}
+
+func OnUpdate(dt float64) {
+	var pos = groot.GetSelfPosition()
+	var nextX = pos[0] - self.Speed*dt
+
+	var playerPos = groot.GetEntityPosition(100)
+	var birdX = playerPos[0]
+	var birdY = playerPos[1]
+
+	var dx = pos[0] - birdX
+	var dy = pos[1] - birdY
+
+	if dx > -1.0 && dx < 1.0 && dy > -3.5 && dy < 3.5 {
+		groot.Log("[GROOT VM] COLLISION DETECTED! Pipe hit bird at Y:", birdY)
+	}
+
+	if nextX < -10.0 {
+		groot.DestroySelf()
+		return
+	}
+
+	groot.SetSelfPosition(nextX, pos[1], pos[2])
+	groot.SetSelfCollider(1.2, 7.0, 1.0)
+}

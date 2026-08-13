@@ -1,15 +1,15 @@
 (
     project: (
-        name: "Groot 3D Demo",
-        version: "0.2.0",
+        name: "Flappy Groot Demo",
+        version: "0.1.0",
     ),
     window: (
-        title: "Groot Engine — 3D RON Assets & GoScript",
+        title: "GROOT ENGINE — Flappy Bird VM Demo",
         width: 1280.0,
         height: 720.0,
     ),
     render: (
-        clear_color: Rgba(0.08, 0.09, 0.12, 1.0),
+        clear_color: (0.02, 0.03, 0.02, 1.0),
     ),
-    initial_scene: "assets/scenes/main.scene.ron",
+    initial_scene: "assets/scenes/flappy.scene.ron",
 )

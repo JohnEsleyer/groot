@@ -1,0 +1,11 @@
+(
+    name: "spawner",
+    script: Some("assets/scripts/spawner.gos"),
+    transform: (
+        position: (0.0, 0.0, 0.0),
+        rotation: (0.0, 0.0, 0.0),
+        scale: (1.0, 1.0, 1.0),
+    ),
+    visual: None,
+    collider: None,
+)

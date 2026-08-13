@@ -1,7 +1,7 @@
 (
-    name: "ground",
+    name: "ceiling_2d",
     transform: (
-        position: (0.0, -5.2, 0.0),
+        position: (0.0, 5.2, 0.0),
         rotation: (0.0, 0.0, 0.0),
         scale: (22.0, 0.8, 1.0),
     ),

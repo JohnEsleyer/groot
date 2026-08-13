@@ -1,0 +1,56 @@
+type BirdController struct {
+	Gravity   float64
+	JumpForce float64
+	VelocityY float64
+	Score     int
+	IsDead    bool
+	AutoBot   bool
+}
+
+var self = BirdController{
+	Gravity:   -16.0,
+	JumpForce:  5.8,
+	VelocityY:  0.0,
+	Score:     0,
+	IsDead:    false,
+	AutoBot:   true,
+}
+
+func OnUpdate(dt float64) {
+	var pos = groot.GetSelfPosition()
+
+	if groot.IsKeyPressed("Space") || groot.IsKeyPressed("KeyW") || groot.IsKeyPressed("ArrowUp") || groot.IsMousePressed(0) {
+		if self.AutoBot {
+			self.AutoBot = false
+			groot.Log("[GROOT VM] Switched mode: MANUAL CONTROL")
+		}
+		self.VelocityY = self.JumpForce
+	}
+
+	if self.AutoBot {
+		if pos[1] < -0.5 && self.VelocityY <= 0 {
+			self.VelocityY = self.JumpForce
+		}
+	}
+
+	self.VelocityY = self.VelocityY + self.Gravity*dt
+	var newY = pos[1] + self.VelocityY*dt
+
+	if newY > 4.6 {
+		newY = 4.6
+		self.VelocityY = 0.0
+	}
+	if newY < -4.6 {
+		groot.Log("[GROOT VM] Bird crashed! Resetting game state...")
+		newY = 0.0
+		self.VelocityY = 0.0
+		self.Score = 0
+	}
+
+	groot.SetSelfPosition(pos[0], newY, pos[2])
+
+	var tilt = groot.Clamp(self.VelocityY*6.0, -35.0, 40.0)
+	groot.SetSelfRotation3D(0.0, 0.0, tilt)
+
+	groot.SetSelfCollider(0.8, 0.8, 0.8)
+}

@@ -45,6 +45,15 @@ pub fn spawn_scene(world: &mut World, scene_path: &str) {
                 _ => None,
             });
 
+            let visual_2d = prefab.visual.as_ref().and_then(|v| match v {
+                VisualConfig::Sprite { size, color, texture } => Some(Visual2D {
+                    size: *size,
+                    color: color.to_array(),
+                    texture_path: texture.clone(),
+                }),
+                _ => None,
+            });
+
             let entity_id = entity_cfg.entity_id.unwrap_or_else(rand_id);
 
             let script_comp = prefab.script.as_ref().map(|s| GoScriptComponent {
@@ -53,17 +62,23 @@ pub fn spawn_scene(world: &mut World, scene_path: &str) {
                 tag: entity_cfg.tag.clone(),
             });
 
-            match (visual_3d, script_comp) {
-                (Some(vis), Some(script)) => {
-                    world.spawn((transform, vis, script, collider));
+            match (visual_3d, visual_2d, script_comp) {
+                (Some(vis3d), _, Some(script)) => {
+                    world.spawn((transform, vis3d, script, collider));
                 }
-                (Some(vis), None) => {
-                    world.spawn((transform, vis, collider));
+                (Some(vis3d), _, None) => {
+                    world.spawn((transform, vis3d, collider));
                 }
-                (None, Some(script)) => {
+                (None, Some(vis2d), Some(script)) => {
+                    world.spawn((transform, vis2d, script, collider));
+                }
+                (None, Some(vis2d), None) => {
+                    world.spawn((transform, vis2d, collider));
+                }
+                (None, None, Some(script)) => {
                     world.spawn((transform, script, collider));
                 }
-                (None, None) => {
+                (None, None, None) => {
                     world.spawn((transform, collider));
                 }
             }

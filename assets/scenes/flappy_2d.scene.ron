@@ -1,0 +1,40 @@
+(
+    name: "Flappy Groot 2D Scene",
+    environment: (
+        ambient_light: Some((
+            color: Rgba(0.0, 0.94, 0.46, 1.0),
+            brightness: 1.0,
+        )),
+        camera: Some(Orthographic2D(
+            viewport: (21.33, 12.0),
+            position: (0.0, 0.0),
+        )),
+    ),
+    entities: [
+        (
+            prefab: "assets/prefabs/background.prefab.ron",
+            entity_id: Some(10),
+            tag: "Background",
+        ),
+        (
+            prefab: "assets/prefabs/bird_2d.prefab.ron",
+            entity_id: Some(100),
+            tag: "Player",
+        ),
+        (
+            prefab: "assets/prefabs/spawner_2d.prefab.ron",
+            entity_id: Some(200),
+            tag: "Spawner",
+        ),
+        (
+            prefab: "assets/prefabs/ground_2d.prefab.ron",
+            entity_id: Some(300),
+            tag: "Boundary",
+        ),
+        (
+            prefab: "assets/prefabs/ceiling_2d.prefab.ron",
+            entity_id: Some(400),
+            tag: "Boundary",
+        ),
+    ],
+)

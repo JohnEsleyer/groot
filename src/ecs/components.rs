@@ -54,6 +54,13 @@ pub struct Visual3D {
 }
 
 #[derive(Debug, Clone)]
+pub struct Visual2D {
+    pub size: (f32, f32),
+    pub color: [f32; 4],
+    pub texture_path: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct GoScriptComponent {
     pub script_path: String,
     pub entity_id: u32,

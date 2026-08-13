@@ -1,0 +1,33 @@
+type Spawner struct {
+	Timer    float64
+	Interval float64
+	Seed     float64
+}
+
+var self = Spawner{
+	Timer:    0.0,
+	Interval: 2.2,
+	Seed:     1.5,
+}
+
+func OnUpdate(dt float64) {
+	self.Timer = self.Timer + dt
+
+	if self.Timer >= self.Interval {
+		self.Timer = 0.0
+		self.Seed = self.Seed + 1.73
+
+		// Pseudo-random gap offset calculation between -2.0 and +2.0
+		var rawOffset = (self.Seed - float64(int(self.Seed)))*4.0 - 2.0
+		var gapY = groot.Clamp(rawOffset, -2.0, 2.0)
+
+		var gapSize = 1.8
+		var topY = gapY + (3.5 + gapSize)
+		var bottomY = gapY - (3.5 + gapSize)
+
+		groot.SpawnPrefab("assets/prefabs/pipe_top_2d.prefab.ron", 9.0, topY, 0.0, "PipeTop")
+		groot.SpawnPrefab("assets/prefabs/pipe_bottom_2d.prefab.ron", 9.0, bottomY, 0.0, "PipeBottom")
+
+		groot.Log("[GROOT VM] Spawned 2D Pipe Pair at Gap Y:", gapY)
+	}
+}

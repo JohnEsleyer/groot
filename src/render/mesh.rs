@@ -41,6 +41,39 @@ pub struct Mesh {
 }
 
 impl Mesh {
+    pub fn quad(device: &wgpu::Device, width: f32, height: f32) -> Self {
+        let hw = width * 0.5;
+        let hh = height * 0.5;
+
+        #[rustfmt::skip]
+        let vertices = [
+            Vertex3D { position: [-hw, -hh, 0.0], normal: [0.0, 0.0, 1.0], uv: [0.0, 1.0] },
+            Vertex3D { position: [ hw, -hh, 0.0], normal: [0.0, 0.0, 1.0], uv: [1.0, 1.0] },
+            Vertex3D { position: [ hw,  hh, 0.0], normal: [0.0, 0.0, 1.0], uv: [1.0, 0.0] },
+            Vertex3D { position: [-hw,  hh, 0.0], normal: [0.0, 0.0, 1.0], uv: [0.0, 0.0] },
+        ];
+
+        let indices: [u16; 6] = [0, 1, 2, 0, 2, 3];
+
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Quad Vertex Buffer"),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Quad Index Buffer"),
+            contents: bytemuck::cast_slice(&indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        Self {
+            vertex_buffer,
+            index_buffer,
+            num_indices: indices.len() as u32,
+        }
+    }
+
     pub fn cuboid(device: &wgpu::Device, x: f32, y: f32, z: f32) -> Self {
         let hx = x * 0.5;
         let hy = y * 0.5;

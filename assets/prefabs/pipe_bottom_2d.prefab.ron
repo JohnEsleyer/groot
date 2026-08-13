@@ -1,0 +1,15 @@
+(
+    name: "pipe_bottom_2d",
+    script: Some("assets/scripts/pipe.gos"),
+    transform: (
+        position: (8.0, -5.0, 0.0),
+        rotation: (0.0, 0.0, 0.0),
+        scale: (1.4, 7.0, 1.0),
+    ),
+    visual: Some(Sprite(
+        size: (1.4, 7.0),
+        color: Rgba(1.0, 1.0, 1.0, 1.0),
+        texture: Some("assets/textures/pipe.png"),
+    )),
+    collider: Some(Box2D(width: 1.4, height: 7.0)),
+)

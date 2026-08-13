@@ -47,6 +47,31 @@ pub fn load_asset_str(path: &str) -> Option<String> {
     std::fs::read_to_string(path).ok()
 }
 
+pub fn load_asset_bytes(path: &str) -> Option<Vec<u8>> {
+    #[cfg(all(debug_assertions, not(target_os = "android")))]
+    {
+        if Path::new(path).exists() {
+            if let Ok(content) = std::fs::read(path) {
+                return Some(content);
+            }
+        }
+    }
+
+    let clean = path.replace('\\', "/");
+    let trimmed = clean.trim_start_matches('/');
+    let relative = normalize_asset_path(path);
+
+    let candidates = [relative.as_str(), trimmed, path];
+
+    for candidate in candidates {
+        if let Some(file) = EmbeddedAssets::get(candidate) {
+            return Some(file.data.to_vec());
+        }
+    }
+
+    std::fs::read(path).ok()
+}
+
 pub fn prepare_script_path(path: &str) -> String {
     #[cfg(all(debug_assertions, not(target_os = "android")))]
     {

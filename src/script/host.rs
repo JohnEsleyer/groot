@@ -7,7 +7,7 @@ use goscript::value::Value;
 use goscript::HotReloadEngine;
 use hecs::World;
 
-use crate::assets::ron_loader::PrefabConfig;
+use crate::assets::ron_loader::{PrefabConfig, ShapeConfig, VisualConfig};
 use crate::ecs::*;
 use crate::groot_module::GrootModuleExt;
 use crate::plugin::PluginManager;
@@ -112,6 +112,24 @@ impl GrootScriptHost {
                     Value::Bool(false)
                 });
 
+                let inp_mouse_down = Rc::clone(&input_ref);
+                vm.register_fn("groot.IsMouseDown", move |args| {
+                    let btn = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as usize;
+                    if btn < 3 {
+                        return Value::Bool(inp_mouse_down.mouse_button_down.get()[btn]);
+                    }
+                    Value::Bool(false)
+                });
+
+                let inp_mouse_pressed = Rc::clone(&input_ref);
+                vm.register_fn("groot.IsMousePressed", move |args| {
+                    let btn = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as usize;
+                    if btn < 3 {
+                        return Value::Bool(inp_mouse_pressed.mouse_button_pressed.get()[btn]);
+                    }
+                    Value::Bool(false)
+                });
+
                 vm.register_fn("groot.GetSelfEntity", |_| {
                     Value::Int(CURRENT_ENTITY.with(|c| c.get()) as i64)
                 });
@@ -164,6 +182,35 @@ impl GrootScriptHost {
                         s.scale_z = sz;
                     });
                     Value::Nil
+                });
+
+                vm.register_fn("groot.SetSelfColor", |args| {
+                    let r = args.first().and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
+                    let g = args.get(1).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
+                    let b = args.get(2).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
+                    let a = args.get(3).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
+                    CURRENT_STATE.with(|st| {
+                        st.borrow_mut().color = (r, g, b, a);
+                    });
+                    Value::Nil
+                });
+
+                vm.register_fn("groot.GetEntityPosition", |args| {
+                    let id = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as u32;
+                    let pos = ENTITY_POSITIONS.with(|map| map.borrow().get(&id).copied());
+                    if let Some((x, y, z)) = pos {
+                        Value::Slice(Rc::new(RefCell::new(vec![
+                            Value::Float(x as f64),
+                            Value::Float(y as f64),
+                            Value::Float(z as f64),
+                        ])))
+                    } else {
+                        Value::Slice(Rc::new(RefCell::new(vec![
+                            Value::Float(0.0),
+                            Value::Float(0.0),
+                            Value::Float(0.0),
+                        ])))
+                    }
                 });
 
                 vm.register_fn("groot.SetSelfCollider", |args| {
@@ -239,10 +286,11 @@ pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
 
     let mut despawn_list = Vec::new();
 
-    for (entity, (comp, tf, visual, collider)) in world.query_mut::<(
+    for (entity, (comp, tf, vis3d, vis2d, collider)) in world.query_mut::<(
         &GoScriptComponent,
         &mut Transform3D,
         Option<&mut Visual3D>,
+        Option<&mut Visual2D>,
         Option<&mut Collider>,
     )>() {
         CURRENT_ENTITY.with(|c| c.set(comp.entity_id));
@@ -257,8 +305,10 @@ pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
             s.scale_x = tf.scale.x;
             s.scale_y = tf.scale.y;
             s.scale_z = tf.scale.z;
-            if let Some(vis) = &visual {
-                s.color = (vis.color[0], vis.color[1], vis.color[2], vis.color[3]);
+            if let Some(v3) = &vis3d {
+                s.color = (v3.color[0], v3.color[1], v3.color[2], v3.color[3]);
+            } else if let Some(v2) = &vis2d {
+                s.color = (v2.color[0], v2.color[1], v2.color[2], v2.color[3]);
             }
             if let Some(col) = &collider {
                 s.collider = **col;
@@ -283,8 +333,11 @@ pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
                 tf.position = glam::Vec3::new(s.x, s.y, s.z);
                 tf.rotation = glam::Vec3::new(s.pitch, s.yaw, s.roll);
                 tf.scale = glam::Vec3::new(s.scale_x, s.scale_y, s.scale_z);
-                if let Some(vis) = visual {
-                    vis.color = [s.color.0, s.color.1, s.color.2, s.color.3];
+                if let Some(v3) = vis3d {
+                    v3.color = [s.color.0, s.color.1, s.color.2, s.color.3];
+                }
+                if let Some(v2) = vis2d {
+                    v2.color = [s.color.0, s.color.1, s.color.2, s.color.3];
                 }
                 if let Some(col) = collider {
                     *col = s.collider;
@@ -303,13 +356,56 @@ pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
                 SpawnRequest::Prefab { path, x, y, z, tag } => {
                     if let Some(prefab) = PrefabConfig::load(&path) {
                         let tf = Transform3D::new(glam::Vec3::new(x, y, z), glam::Vec3::ZERO, glam::Vec3::ONE);
+                        let visual_3d = prefab.visual.as_ref().and_then(|v| match v {
+                            VisualConfig::MeshPbr { shape, material } => {
+                                let shape = match shape {
+                                    ShapeConfig::Cuboid { x, y, z } => {
+                                        MeshShape::Cuboid { x: *x, y: *y, z: *z }
+                                    }
+                                    ShapeConfig::Sphere { radius } => MeshShape::Sphere { radius: *radius },
+                                };
+                                Some(Visual3D {
+                                    shape,
+                                    color: material.color.to_array(),
+                                })
+                            }
+                            _ => None,
+                        });
+                        let visual_2d = prefab.visual.as_ref().and_then(|v| match v {
+                            VisualConfig::Sprite { size, color, texture } => Some(Visual2D {
+                                size: *size,
+                                color: color.to_array(),
+                                texture_path: texture.clone(),
+                            }),
+                            _ => None,
+                        });
+
                         let script = prefab.script.map(|s| GoScriptComponent {
                             script_path: s,
                             entity_id: 20000,
                             tag,
                         });
-                        if let Some(sc) = script {
-                            world.spawn((tf, sc, Collider::default()));
+                        let collider = prefab.collider.unwrap_or_default();
+
+                        match (visual_3d, visual_2d, script) {
+                            (Some(v3), _, Some(sc)) => {
+                                world.spawn((tf, v3, sc, collider));
+                            }
+                            (Some(v3), _, None) => {
+                                world.spawn((tf, v3, collider));
+                            }
+                            (None, Some(v2), Some(sc)) => {
+                                world.spawn((tf, v2, sc, collider));
+                            }
+                            (None, Some(v2), None) => {
+                                world.spawn((tf, v2, collider));
+                            }
+                            (None, None, Some(sc)) => {
+                                world.spawn((tf, sc, collider));
+                            }
+                            (None, None, None) => {
+                                world.spawn((tf, collider));
+                            }
                         }
                     }
                 }
