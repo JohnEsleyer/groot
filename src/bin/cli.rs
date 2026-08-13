@@ -35,12 +35,12 @@ fn print_help() {
     println!("Usage: groot <command> [args]");
     println!();
     println!("Commands:");
-    println!("  new <name>                        - Scaffold a new Groot project");
-    println!("  run [--target <t>] [--device <d>] - Run Groot game (targets: desktop, android; device: serial or index)");
-    println!("  build [--target <t>]              - Build release bundle (targets: desktop, android)");
-    println!("  plugin                            - Manage plugins (list, add, remove)");
-    println!("  info                              - Print engine version and workspace info");
-    println!("  help                              - Show this help");
+    println!("  new <name>                                - Scaffold a new Groot project");
+    println!("  run [--target <t>] [--device <d>] [--bin] - Run Groot game (targets: desktop, android)");
+    println!("  build [--target <t>] [--bin]              - Build release bundle (targets: desktop, android)");
+    println!("  plugin                                    - Manage plugins (list, add, remove)");
+    println!("  info                                      - Print engine version and workspace info");
+    println!("  help                                      - Show this help");
     println!("==================================================");
 }
 
@@ -108,6 +108,32 @@ fn parse_device_arg(args: &[String]) -> Option<String> {
             return Some(args[i + 1].clone());
         }
     }
+    None
+}
+
+/// Resolve explicit `--bin <name>` or inspect `Cargo.toml` for `default-run`.
+fn resolve_bin_target(args: &[String], workdir: &Path) -> Option<String> {
+    for i in 0..args.len() {
+        if args[i] == "--bin" && i + 1 < args.len() {
+            return Some(args[i + 1].clone());
+        }
+    }
+
+    let cargo_toml_path = workdir.join("Cargo.toml");
+    if let Ok(content) = fs::read_to_string(&cargo_toml_path) {
+        for line in content.lines() {
+            let line = line.trim();
+            if line.starts_with("default-run") {
+                if let Some(val) = line.split('=').nth(1) {
+                    let clean = val.trim().trim_matches('"').trim_matches('\'').trim();
+                    if !clean.is_empty() {
+                        return Some(clean.to_string());
+                    }
+                }
+            }
+        }
+    }
+
     None
 }
 
@@ -409,6 +435,8 @@ fn cmd_run(args: &[String]) {
     ensure_cargo_project(&workdir);
 
     let target = parse_target(args);
+    let bin_target = resolve_bin_target(args, &workdir);
+
     match target {
         "android" => {
             ensure_cargo_apk_installed();
@@ -419,7 +447,12 @@ fn cmd_run(args: &[String]) {
             if let Some(serial) = device_serial {
                 cmd.env("ANDROID_SERIAL", serial);
             }
-            cmd.args(["apk", "run", "--target", "aarch64-linux-android"]);
+            let mut cargo_args = vec!["apk", "run", "--target", "aarch64-linux-android"];
+            if let Some(ref bin) = bin_target {
+                cargo_args.push("--bin");
+                cargo_args.push(bin);
+            }
+            cmd.args(cargo_args);
 
             let status = cmd.status().unwrap_or_else(|e| {
                 eprintln!("Error: failed to launch cargo-apk: {e}");
@@ -429,14 +462,19 @@ fn cmd_run(args: &[String]) {
         }
         "desktop" => {
             println!("Running Desktop Groot game in '{}' ...", workdir.display());
-            let status = Command::new("cargo")
-                .current_dir(&workdir)
-                .arg("run")
-                .status()
-                .unwrap_or_else(|e| {
-                    eprintln!("Error: failed to launch cargo: {e}");
-                    std::process::exit(1);
-                });
+            let mut cmd = Command::new("cargo");
+            cmd.current_dir(&workdir);
+            let mut cargo_args = vec!["run"];
+            if let Some(ref bin) = bin_target {
+                cargo_args.push("--bin");
+                cargo_args.push(bin);
+            }
+            cmd.args(cargo_args);
+
+            let status = cmd.status().unwrap_or_else(|e| {
+                eprintln!("Error: failed to launch cargo: {e}");
+                std::process::exit(1);
+            });
             std::process::exit(status.code().unwrap_or(0));
         }
         other => {
@@ -451,30 +489,43 @@ fn cmd_build(args: &[String]) {
     ensure_cargo_project(&workdir);
 
     let target = parse_target(args);
+    let bin_target = resolve_bin_target(args, &workdir);
+
     match target {
         "android" => {
             ensure_cargo_apk_installed();
             println!("Building Android ARM64 APK bundle...");
-            let status = Command::new("cargo")
-                .current_dir(&workdir)
-                .args(["apk", "build", "--target", "aarch64-linux-android", "--release"])
-                .status()
-                .unwrap_or_else(|e| {
-                    eprintln!("Error: failed to launch cargo-apk: {e}");
-                    std::process::exit(1);
-                });
+            let mut cmd = Command::new("cargo");
+            cmd.current_dir(&workdir);
+            let mut cargo_args =
+                vec!["apk", "build", "--target", "aarch64-linux-android", "--release"];
+            if let Some(ref bin) = bin_target {
+                cargo_args.push("--bin");
+                cargo_args.push(bin);
+            }
+            cmd.args(cargo_args);
+
+            let status = cmd.status().unwrap_or_else(|e| {
+                eprintln!("Error: failed to launch cargo-apk: {e}");
+                std::process::exit(1);
+            });
             std::process::exit(status.code().unwrap_or(0));
         }
         "desktop" => {
             println!("Building Desktop release binary in '{}' ...", workdir.display());
-            let status = Command::new("cargo")
-                .current_dir(&workdir)
-                .args(["build", "--release"])
-                .status()
-                .unwrap_or_else(|e| {
-                    eprintln!("Error: failed to launch cargo: {e}");
-                    std::process::exit(1);
-                });
+            let mut cmd = Command::new("cargo");
+            cmd.current_dir(&workdir);
+            let mut cargo_args = vec!["build", "--release"];
+            if let Some(ref bin) = bin_target {
+                cargo_args.push("--bin");
+                cargo_args.push(bin);
+            }
+            cmd.args(cargo_args);
+
+            let status = cmd.status().unwrap_or_else(|e| {
+                eprintln!("Error: failed to launch cargo: {e}");
+                std::process::exit(1);
+            });
             std::process::exit(status.code().unwrap_or(0));
         }
         other => {
