@@ -71,15 +71,12 @@ fn main() {
 
 /// Verify that `cargo-apk` is installed before running Android targets.
 fn ensure_cargo_apk_installed() {
-    let check = Command::new("cargo")
-        .arg("apk")
-        .arg("--version")
-        .output();
-
-    let installed = match check {
-        Ok(output) => output.status.success(),
-        Err(_) => false,
-    };
+    // Use --help because cargo-apk does not implement --version
+    let installed = Command::new("cargo")
+        .args(["apk", "--help"])
+        .output()
+        .map(|out| out.status.success())
+        .unwrap_or(false);
 
     if !installed {
         eprintln!("Error: 'cargo-apk' is not installed on your system.");
