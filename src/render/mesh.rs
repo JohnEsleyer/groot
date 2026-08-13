@@ -48,32 +48,26 @@ impl Mesh {
 
         #[rustfmt::skip]
         let vertices = [
-            // Front face (+Z)
             Vertex3D { position: [-hx, -hy,  hz], normal: [ 0.0,  0.0,  1.0], uv: [0.0, 1.0] },
             Vertex3D { position: [ hx, -hy,  hz], normal: [ 0.0,  0.0,  1.0], uv: [1.0, 1.0] },
             Vertex3D { position: [ hx,  hy,  hz], normal: [ 0.0,  0.0,  1.0], uv: [1.0, 0.0] },
             Vertex3D { position: [-hx,  hy,  hz], normal: [ 0.0,  0.0,  1.0], uv: [0.0, 0.0] },
-            // Back face (-Z)
             Vertex3D { position: [ hx, -hy, -hz], normal: [ 0.0,  0.0, -1.0], uv: [0.0, 1.0] },
             Vertex3D { position: [-hx, -hy, -hz], normal: [ 0.0,  0.0, -1.0], uv: [1.0, 1.0] },
             Vertex3D { position: [-hx,  hy, -hz], normal: [ 0.0,  0.0, -1.0], uv: [1.0, 0.0] },
             Vertex3D { position: [ hx,  hy, -hz], normal: [ 0.0,  0.0, -1.0], uv: [0.0, 0.0] },
-            // Top face (+Y)
             Vertex3D { position: [-hx,  hy,  hz], normal: [ 0.0,  1.0,  0.0], uv: [0.0, 1.0] },
             Vertex3D { position: [ hx,  hy,  hz], normal: [ 0.0,  1.0,  0.0], uv: [1.0, 1.0] },
             Vertex3D { position: [ hx,  hy, -hz], normal: [ 0.0,  1.0,  0.0], uv: [1.0, 0.0] },
             Vertex3D { position: [-hx,  hy, -hz], normal: [ 0.0,  1.0,  0.0], uv: [0.0, 0.0] },
-            // Bottom face (-Y)
             Vertex3D { position: [-hx, -hy, -hz], normal: [ 0.0, -1.0,  0.0], uv: [0.0, 1.0] },
             Vertex3D { position: [ hx, -hy, -hz], normal: [ 0.0, -1.0,  0.0], uv: [1.0, 1.0] },
             Vertex3D { position: [ hx, -hy,  hz], normal: [ 0.0, -1.0,  0.0], uv: [1.0, 0.0] },
             Vertex3D { position: [-hx, -hy,  hz], normal: [ 0.0, -1.0,  0.0], uv: [0.0, 0.0] },
-            // Right face (+X)
             Vertex3D { position: [ hx, -hy,  hz], normal: [ 1.0,  0.0,  0.0], uv: [0.0, 1.0] },
             Vertex3D { position: [ hx, -hy, -hz], normal: [ 1.0,  0.0,  0.0], uv: [1.0, 1.0] },
             Vertex3D { position: [ hx,  hy, -hz], normal: [ 1.0,  0.0,  0.0], uv: [1.0, 0.0] },
             Vertex3D { position: [ hx,  hy,  hz], normal: [ 1.0,  0.0,  0.0], uv: [0.0, 0.0] },
-            // Left face (-X)
             Vertex3D { position: [-hx, -hy, -hz], normal: [-1.0,  0.0,  0.0], uv: [0.0, 1.0] },
             Vertex3D { position: [-hx, -hy,  hz], normal: [-1.0,  0.0,  0.0], uv: [1.0, 1.0] },
             Vertex3D { position: [-hx,  hy,  hz], normal: [-1.0,  0.0,  0.0], uv: [1.0, 0.0] },

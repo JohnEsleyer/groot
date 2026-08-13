@@ -22,46 +22,30 @@ use winit::{
     window::WindowBuilder,
 };
 
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-
 /// Synchronous entry point for native desktop platforms (Linux / Windows / macOS).
 pub fn run_game(config_path: &str) {
-    #[cfg(not(any(target_arch = "wasm32", target_os = "android")))]
+    #[cfg(not(target_os = "android"))]
     {
         platform::init_platform_logging();
         let event_loop = platform::desktop::create_event_loop();
         pollster::block_on(run_game_with_event_loop(event_loop, config_path));
     }
-    #[cfg(any(target_arch = "wasm32", target_os = "android"))]
+    #[cfg(target_os = "android")]
     {
         log::warn!(
-            "run_game is not the entry point on this target; \
-             use run_wasm (web) or android_main (Android)."
+            "run_game is not the entry point on Android; use android_main."
         );
         let _ = config_path;
     }
 }
 
-/// WASM entry point exported to the web browser.
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen(start)]
-pub fn run_wasm() {
-    platform::init_platform_logging();
-
-    wasm_bindgen_futures::spawn_local(async {
-        let event_loop = EventLoop::new().expect("Failed to create Web EventLoop");
-        run_game_with_event_loop(event_loop, "assets/config.ron").await;
-    });
-}
-
-/// Non-blocking async runner compatible with every platform. The caller
-/// supplies the event loop so Android can attach its `AndroidApp` first.
+// ---------------------------------------------------------------------------
+// Event Loop Runner (wgpu)
+// ---------------------------------------------------------------------------
 pub async fn run_game_with_event_loop(event_loop: EventLoop<()>, config_path: &str) {
     let config = GrootConfig::load(config_path);
     log::info!("Starting Groot Engine: {}", config.project.name);
 
-    // Attach the winit window to the HTML canvas on WASM builds.
     let window = Arc::new(
         WindowBuilder::new()
             .with_title(&config.window.title)
@@ -72,7 +56,6 @@ pub async fn run_game_with_event_loop(event_loop: EventLoop<()>, config_path: &s
             .build(&event_loop)
             .expect("Failed to create Window"),
     );
-    platform::web::mount_canvas(&window);
 
     let mut render_ctx = RenderContext::new(
         Arc::clone(&window),
@@ -107,8 +90,6 @@ pub async fn run_game_with_event_loop(event_loop: EventLoop<()>, config_path: &s
     let mut last_frame_time = Instant::now();
 
     let _ = event_loop.run(move |event, target| match event {
-        // Mobile lifecycle: surfaces are invalidated when the app is paused or
-        // rotated. Reconfigure the surface when the activity is resumed.
         Event::Resumed => {
             if render_ctx.size.width > 0 && render_ctx.size.height > 0 {
                 render_ctx.resize(render_ctx.size);

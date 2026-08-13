@@ -23,8 +23,10 @@ impl<'a> RenderContext<'a> {
 
         let surface = unsafe {
             instance
-                .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::from_window(&window).unwrap())
-                .unwrap()
+                .create_surface_unsafe(
+                    wgpu::SurfaceTargetUnsafe::from_window(&window).unwrap(),
+                )
+                .expect("Failed to create surface")
         };
 
         let adapter = instance
@@ -34,17 +36,13 @@ impl<'a> RenderContext<'a> {
                 force_fallback_adapter: false,
             })
             .await
-            .expect("Failed to find GPU adapter");
+            .expect("Failed to find suitable GPU adapter");
 
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     required_features: wgpu::Features::empty(),
-                    required_limits: if cfg!(target_arch = "wasm32") {
-                        wgpu::Limits::downlevel_webgl2_defaults()
-                    } else {
-                        wgpu::Limits::default()
-                    },
+                    required_limits: wgpu::Limits::default(),
                     label: Some("Groot Render Device"),
                 },
                 None,

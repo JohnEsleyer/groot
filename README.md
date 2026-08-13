@@ -22,7 +22,7 @@ assets/scripts/*.gos        ──►  GoScript VM (Logic Hot Reloading)  ──
 - `assets/prefabs/*.prefab.ron` — 2D/3D prefabs (sprites, text, 3D PBR meshes, lights, colliders, parent-child hierarchies).
 - `assets/scenes/*.scene.ron` — scene layout, environment settings, cameras, entity initializers.
 - `src/main.rs` — initializes winit window and wgpu render context, runs main event loop.
-- `src/platform/` — platform abstraction layer (desktop event loop, WASM canvas, Android entry).
+- `src/platform/` — platform abstraction layer (desktop event loop, Android entry).
 - `src/render/` — pure wgpu rendering engine (3D meshes, 2D sprites, text, gizmos).
 - `src/ecs/` — hecs-based ECS components and queries.
 - `src/script/` — GoScript VM host, input tracking, script execution.
@@ -83,33 +83,28 @@ groot plugin remove audio
 
 ```bash
 # Scaffold a new project folder
-cargo run --bin groot -- new my-game
+cargo run --bin groot-cli -- new my-game
 
 # Run the current Groot game
-cargo run --bin groot -- run
+cargo run --bin groot-cli -- run
 
 # Build a release bundle
-cargo run --bin groot -- build
+cargo run --bin groot-cli -- build
 
 # Manage plugins
-cargo run --bin groot -- plugin list
-cargo run --bin groot -- plugin add audio
-cargo run --bin groot -- plugin remove audio
+cargo run --bin groot-cli -- plugin list
+cargo run --bin groot-cli -- plugin add audio
+cargo run --bin groot-cli -- plugin remove audio
 ```
 
 ### Multi-Platform Targets
 
-Desktop, WASM, and Android builds share a single `--target` flag on `run`
-and `build` (defaults to `desktop`):
+Desktop and Android builds share a single `--target` flag on `run` and `build` (defaults to `desktop`):
 
 ```bash
 # Desktop (current host)
 groot run
 groot build --target desktop
-
-# WebAssembly bundle (requires `cargo install trunk`)
-groot run --target web        # trunk serve (hot reload)
-groot build --target web      # trunk build --release
 
 # Android APK (requires rustup target aarch64-linux-android + cargo-apk)
 groot run --target android    # cargo apk run
@@ -144,7 +139,7 @@ func OnUpdate(dt float64) {
 ## Dependencies
 
 - `winit` 0.29 - Cross-platform windowing and input
-- `wgpu` 0.19 - Modern GPU rendering (WebGPU/Vulkan/Metal/DX12)
+- `wgpu` 0.19 - Modern GPU rendering (Vulkan/Metal/DX12)
 - `glam` 0.27 - Fast 3D/2D math library
 - `hecs` 0.10 - Minimalist archetype ECS
 - `bytemuck` 1.14 - Safe casting for GPU buffers

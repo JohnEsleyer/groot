@@ -11,7 +11,7 @@ path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-name = "groot"
+name = "groot-cli"
 path = "src/bin/cli.rs"
 
 [[bin]]
@@ -20,8 +20,8 @@ path = "src/main.rs"
 
 [dependencies]
 # Graphics & Windowing
-winit = "0.29"
 wgpu = "0.19"
+winit = "0.29"
 glam = "0.27"
 bytemuck = { version = "1.14", features = ["derive"] }
 pollster = "0.3"
@@ -48,19 +48,9 @@ groot-plugin-audio = { git = "https://github.com/JohnEsleyer/groot-plugin-audio"
 
 groot-plugin-gizmos = { git = "https://github.com/JohnEsleyer/groot-plugin-gizmos" }
 
-# WebAssembly Target Dependencies
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = [
-    "Document",
-    "Window",
-    "Element",
-    "HtmlCanvasElement",
-    "Node",
-] }
-console_log = "1.0"
-console_error_panic_hook = "0.1"
+# Patch goscript to use local copy
+[patch."https://github.com/johnesleyer/goscript"]
+goscript = { path = "../goscript" }
 
 # Android Mobile Target Dependencies
 # winit needs its `android-native-activity` feature so the event loop can

@@ -1,13 +1,10 @@
 pub mod android;
 pub mod desktop;
-pub mod web;
 
 /// Unified source of truth for loading text assets on any platform.
 ///
-/// On the Web (WASM) there is no synchronous filesystem, so assets always
-/// resolve through the binary-embedded copy (`rust-embed`). On desktop and
-/// Android, files are read from disk first (debug builds hot-reload from
-/// `assets/`), then fall back to the embedded copy.
+/// Files are read from disk first (debug builds hot-reload from `assets/`),
+/// then fall back to the embedded copy.
 pub trait AssetLoader {
     fn load_text(&self, path: &str) -> Option<String>;
 }
@@ -26,13 +23,7 @@ pub fn init_platform_logging() {
         );
     }
 
-    #[cfg(target_arch = "wasm32")]
-    {
-        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-        console_log::init_with_level(log::Level::Info).expect("Failed to init console log");
-    }
-
-    #[cfg(not(any(target_arch = "wasm32", target_os = "android")))]
+    #[cfg(not(target_os = "android"))]
     {
         env_logger::builder()
             .filter_level(log::LevelFilter::Info)
