@@ -16,7 +16,7 @@ fn normalize_asset_path(path: &str) -> String {
 }
 
 pub fn load_asset_str(path: &str) -> Option<String> {
-    #[cfg(debug_assertions)]
+    #[cfg(all(debug_assertions, not(target_os = "android")))]
     {
         if Path::new(path).exists() {
             if let Ok(content) = std::fs::read_to_string(path) {
@@ -48,7 +48,7 @@ pub fn load_asset_str(path: &str) -> Option<String> {
 }
 
 pub fn prepare_script_path(path: &str) -> String {
-    #[cfg(debug_assertions)]
+    #[cfg(all(debug_assertions, not(target_os = "android")))]
     {
         if Path::new(path).exists() {
             return path.to_string();

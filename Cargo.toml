@@ -42,7 +42,7 @@ goscript = { git = "https://github.com/johnesleyer/goscript", branch = "main" }
 groot-plugin-api = { git = "https://github.com/JohnEsleyer/groot-plugin-api" }
 
 # Binary asset embedding
-rust-embed = "8.4"
+rust-embed = { version = "8.4", features = ["debug-embed"] }
 
 groot-plugin-audio = { git = "https://github.com/JohnEsleyer/groot-plugin-audio" }
 
