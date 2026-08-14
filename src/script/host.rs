@@ -13,7 +13,7 @@ use crate::groot_module::GrootModuleExt;
 use crate::plugin::PluginManager;
 use crate::script::input::InputState;
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 struct EntityState {
     x: f32,
     y: f32,
@@ -27,6 +27,17 @@ struct EntityState {
     color: (f32, f32, f32, f32),
     collider: Collider,
     destroy_requested: bool,
+    text_value: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CameraCommandState {
+    pub pos: (f32, f32, f32),
+    pub target: (f32, f32, f32),
+    pub fov: f32,
+    pub viewport: (f32, f32),
+    pub modified_3d: bool,
+    pub modified_2d: bool,
 }
 
 thread_local! {
@@ -34,6 +45,14 @@ thread_local! {
     static CURRENT_STATE: RefCell<EntityState> = RefCell::new(EntityState::default());
     static ENTITY_POSITIONS: RefCell<HashMap<u32, (f32, f32, f32)>> = RefCell::new(HashMap::new());
     static TAG_POSITIONS: RefCell<HashMap<String, Vec<(f32, f32, f32)>>> = RefCell::new(HashMap::new());
+    static CAMERA_COMMANDS: RefCell<CameraCommandState> = RefCell::new(CameraCommandState {
+        pos: (0.0, 0.0, 10.0),
+        target: (0.0, 0.0, 0.0),
+        fov: 60.0,
+        viewport: (21.33, 12.0),
+        modified_3d: false,
+        modified_2d: false,
+    });
 }
 
 #[derive(Clone, Debug)]
@@ -44,6 +63,7 @@ pub enum SpawnRequest {
 static SPAWN_REQUESTS: Mutex<Vec<SpawnRequest>> = Mutex::new(Vec::new());
 static DESPAWN_TAGS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static NEXT_ENTITY_ID: Mutex<u32> = Mutex::new(20000);
+static SET_TEXT_BY_TAG_REQUESTS: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
 
 /// Cached metadata for a loaded script — tracks which lifecycle hooks are defined.
 #[derive(Debug, Clone, Default)]
@@ -138,7 +158,7 @@ impl GrootScriptHost {
                 });
 
                 vm.register_fn("groot.GetSelfPosition", |_| {
-                    let s = CURRENT_STATE.with(|st| *st.borrow());
+                    let s = CURRENT_STATE.with(|st| st.borrow().clone());
                     Value::Slice(Rc::new(RefCell::new(vec![
                         Value::Float(s.x as f64),
                         Value::Float(s.y as f64),
@@ -252,6 +272,79 @@ impl GrootScriptHost {
                     Value::Nil
                 });
 
+                vm.register_fn("groot.SetCameraPosition", |args| {
+                    let x = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    let y = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    let z = args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    CAMERA_COMMANDS.with(|c| {
+                        let mut cam = c.borrow_mut();
+                        cam.pos = (x, y, z);
+                        cam.modified_3d = true;
+                        cam.modified_2d = true;
+                    });
+                    Value::Nil
+                });
+
+                vm.register_fn("groot.GetCameraPosition", |_| {
+                    let pos = CAMERA_COMMANDS.with(|c| c.borrow().pos);
+                    Value::Slice(Rc::new(RefCell::new(vec![
+                        Value::Float(pos.0 as f64),
+                        Value::Float(pos.1 as f64),
+                        Value::Float(pos.2 as f64),
+                    ])))
+                });
+
+                vm.register_fn("groot.SetCameraTarget", |args| {
+                    let x = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    let y = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    let z = args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+                    CAMERA_COMMANDS.with(|c| {
+                        let mut cam = c.borrow_mut();
+                        cam.target = (x, y, z);
+                        cam.modified_3d = true;
+                    });
+                    Value::Nil
+                });
+
+                vm.register_fn("groot.SetCameraFov", |args| {
+                    let fov = args.first().and_then(|v| v.as_number()).unwrap_or(60.0) as f32;
+                    CAMERA_COMMANDS.with(|c| {
+                        let mut cam = c.borrow_mut();
+                        cam.fov = fov;
+                        cam.modified_3d = true;
+                    });
+                    Value::Nil
+                });
+
+                vm.register_fn("groot.SetCameraViewport", |args| {
+                    let w = args.first().and_then(|v| v.as_number()).unwrap_or(21.33) as f32;
+                    let h = args.get(1).and_then(|v| v.as_number()).unwrap_or(12.0) as f32;
+                    CAMERA_COMMANDS.with(|c| {
+                        let mut cam = c.borrow_mut();
+                        cam.viewport = (w, h);
+                        cam.modified_2d = true;
+                    });
+                    Value::Nil
+                });
+
+                vm.register_fn("groot.SetSelfText", |args| {
+                    if let Some(text) = args.first().and_then(|v| v.as_string()) {
+                        CURRENT_STATE.with(|st| {
+                            st.borrow_mut().text_value = Some(text.to_string());
+                        });
+                    }
+                    Value::Nil
+                });
+
+                vm.register_fn("groot.SetTextByTag", |args| {
+                    let tag = args.first().and_then(|v| v.as_string()).unwrap_or_default();
+                    let text = args.get(1).and_then(|v| v.as_string()).unwrap_or_default();
+                    if let Ok(mut reqs) = SET_TEXT_BY_TAG_REQUESTS.lock() {
+                        reqs.push((tag.to_string(), text.to_string()));
+                    }
+                    Value::Nil
+                });
+
                 vm.register_fn("groot.DespawnByTag", |args| {
                     let tag = args.first().and_then(|v| v.as_string()).unwrap_or("").to_string();
                     if let Ok(mut tags) = DESPAWN_TAGS.lock() {
@@ -300,6 +393,24 @@ impl GrootScriptHost {
     }
 }
 
+pub fn sync_camera_commands(cam_3d: &mut crate::render::Camera3D, cam_2d: &mut crate::render::Camera2D) {
+    CAMERA_COMMANDS.with(|c| {
+        let mut cmd = c.borrow_mut();
+        if cmd.modified_3d {
+            cam_3d.eye = glam::Vec3::new(cmd.pos.0, cmd.pos.1, cmd.pos.2);
+            cam_3d.target = glam::Vec3::new(cmd.target.0, cmd.target.1, cmd.target.2);
+            cam_3d.fovy = cmd.fov.to_radians();
+            cmd.modified_3d = false;
+        }
+        if cmd.modified_2d {
+            cam_2d.position = glam::Vec2::new(cmd.pos.0, cmd.pos.1);
+            cam_2d.viewport_width = cmd.viewport.0;
+            cam_2d.viewport_height = cmd.viewport.1;
+            cmd.modified_2d = false;
+        }
+    });
+}
+
 pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
     host.reload_all();
     host.plugin_mgr.update_all(world, dt);
@@ -324,11 +435,12 @@ pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
 
     let mut despawn_list = Vec::new();
 
-    for (entity, (comp, tf, vis3d, vis2d, collider)) in world.query_mut::<(
+    for (entity, (comp, tf, vis3d, vis2d, vistext, collider)) in world.query_mut::<(
         &GoScriptComponent,
         &mut Transform3D,
         Option<&mut Visual3D>,
         Option<&mut Visual2D>,
+        Option<&mut VisualText>,
         Option<&mut Collider>,
     )>() {
         CURRENT_ENTITY.with(|c| c.set(comp.entity_id));
@@ -347,11 +459,14 @@ pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
                 s.color = (v3.color[0], v3.color[1], v3.color[2], v3.color[3]);
             } else if let Some(v2) = &vis2d {
                 s.color = (v2.color[0], v2.color[1], v2.color[2], v2.color[3]);
+            } else if let Some(vt) = &vistext {
+                s.color = (vt.color[0], vt.color[1], vt.color[2], vt.color[3]);
             }
             if let Some(col) = &collider {
                 s.collider = **col;
             }
             s.destroy_requested = false;
+            s.text_value = None;
         });
 
         let loaded = host.ensure_engine(&comp.script_path);
@@ -377,6 +492,12 @@ pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
                 if let Some(v2) = vis2d {
                     v2.color = [s.color.0, s.color.1, s.color.2, s.color.3];
                 }
+                if let Some(vt) = vistext {
+                    vt.color = [s.color.0, s.color.1, s.color.2, s.color.3];
+                    if let Some(txt) = &s.text_value {
+                        vt.value = txt.clone();
+                    }
+                }
                 if let Some(col) = collider {
                     *col = s.collider;
                 }
@@ -386,6 +507,21 @@ pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
 
     for e in despawn_list {
         let _ = world.despawn(e);
+    }
+
+    if let Ok(mut reqs) = SET_TEXT_BY_TAG_REQUESTS.lock() {
+        for (tag, text) in reqs.drain(..) {
+            for (_entity, (comp, vis_text)) in world.query_mut::<(&GoScriptComponent, &mut VisualText)>() {
+                if comp.tag == tag {
+                    vis_text.value = text.clone();
+                }
+            }
+            for (_entity, (tag_comp, vis_text)) in world.query_mut::<(&TagComponent, &mut VisualText)>() {
+                if tag_comp.0 == tag {
+                    vis_text.value = text.clone();
+                }
+            }
+        }
     }
 
     if let Ok(mut tags) = DESPAWN_TAGS.lock() {
@@ -442,6 +578,15 @@ pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
                             }),
                             _ => None,
                         });
+                        let visual_text = prefab.visual.as_ref().and_then(|v| match v {
+                            VisualConfig::Text { value, size, color, layer } => Some(VisualText {
+                                value: value.clone(),
+                                size: *size,
+                                color: color.to_array(),
+                                layer: *layer,
+                            }),
+                            _ => None,
+                        });
 
                         let script = prefab.script.map(|s| GoScriptComponent {
                             script_path: s,
@@ -457,23 +602,29 @@ pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
                         });
                         let collider = prefab.collider.unwrap_or_default();
 
-                        match (visual_3d, visual_2d, script) {
-                            (Some(v3), _, Some(sc)) => {
+                        match (visual_3d, visual_2d, visual_text, script) {
+                            (Some(v3), _, _, Some(sc)) => {
                                 world.spawn((tf, v3, sc, collider));
                             }
-                            (Some(v3), _, None) => {
+                            (Some(v3), _, _, None) => {
                                 world.spawn((tf, v3, collider));
                             }
-                            (None, Some(v2), Some(sc)) => {
+                            (None, Some(v2), _, Some(sc)) => {
                                 world.spawn((tf, v2, sc, collider));
                             }
-                            (None, Some(v2), None) => {
+                            (None, Some(v2), _, None) => {
                                 world.spawn((tf, v2, collider));
                             }
-                            (None, None, Some(sc)) => {
+                            (None, None, Some(vt), Some(sc)) => {
+                                world.spawn((tf, vt, sc, collider));
+                            }
+                            (None, None, Some(vt), None) => {
+                                world.spawn((tf, vt, collider));
+                            }
+                            (None, None, None, Some(sc)) => {
                                 world.spawn((tf, sc, collider));
                             }
-                            (None, None, None) => {
+                            (None, None, None, None) => {
                                 world.spawn((tf, collider));
                             }
                         }

@@ -1,0 +1,17 @@
+(
+    name: "flappy_hud",
+    script: None,
+    transform: (
+        position: (0.0, 5.2, 0.0),
+        rotation: (0.0, 0.0, 0.0),
+        scale: (1.0, 1.0, 1.0),
+    ),
+    visual: Some(Text(
+        value: "SCORE: 0  |  HIGH: 0  |  MODE: BOT",
+        size: 0.85,
+        color: Rgba(0.0, 0.94, 0.46, 1.0),
+        layer: 200,
+    )),
+    collider: None,
+    children: [],
+)

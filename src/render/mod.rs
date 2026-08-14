@@ -1,5 +1,6 @@
 pub mod camera;
 pub mod context;
+pub mod font;
 pub mod mesh;
 pub mod pipeline_2d;
 pub mod pipeline_3d;

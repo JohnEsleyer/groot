@@ -62,11 +62,22 @@ pub struct Visual2D {
 }
 
 #[derive(Debug, Clone)]
+pub struct VisualText {
+    pub value: String,
+    pub size: f32,
+    pub color: [f32; 4],
+    pub layer: i32,
+}
+
+#[derive(Debug, Clone)]
 pub struct GoScriptComponent {
     pub script_path: String,
     pub entity_id: u32,
     pub tag: String,
 }
+
+#[derive(Debug, Clone)]
+pub struct TagComponent(pub String);
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub enum Collider {

@@ -270,6 +270,60 @@ impl TextureManager {
     pub fn layout(&self) -> &wgpu::BindGroupLayout {
         &self.bind_group_layout
     }
+
+    /// Creates or retrieves a cached wgpu bind group for rasterized text and returns its cache key.
+    pub fn get_or_create_text(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        text: &str,
+        color: [f32; 4],
+    ) -> &wgpu::BindGroup {
+        let key = format!("text::{text}::{:?}", color);
+        if self.cached_bind_groups.contains_key(&key) {
+            return &self.cached_bind_groups[&key];
+        }
+
+        let (width, height, rgba) = super::font::render_text_to_rgba(text, color);
+        let bind_group = Self::create_bind_group_from_rgba(
+            device,
+            queue,
+            &self.bind_group_layout,
+            &self.sampler,
+            width,
+            height,
+            &rgba,
+            &key,
+        );
+
+        self.cached_bind_groups.insert(key.clone(), bind_group);
+        &self.cached_bind_groups[&key]
+    }
+
+    pub fn get_text_key(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        text: &str,
+        color: [f32; 4],
+    ) -> String {
+        let key = format!("text::{text}::{:?}", color);
+        if !self.cached_bind_groups.contains_key(&key) {
+            let (width, height, rgba) = super::font::render_text_to_rgba(text, color);
+            let bind_group = Self::create_bind_group_from_rgba(
+                device,
+                queue,
+                &self.bind_group_layout,
+                &self.sampler,
+                width,
+                height,
+                &rgba,
+                &key,
+            );
+            self.cached_bind_groups.insert(key.clone(), bind_group);
+        }
+        key
+    }
 }
 
 /// Generates the Groot mascot bird sprite exactly as drawn by the landing-page

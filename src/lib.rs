@@ -212,6 +212,7 @@ pub async fn run_game_with_event_loop(event_loop: EventLoop<()>, config_path: &s
                         let dt = (now - last_frame_time).as_secs_f64();
                         last_frame_time = now;
 
+                        script::sync_camera_commands(&mut st.camera_3d, &mut st.camera_2d);
                         update_scripts(&mut st.script_host, &mut st.world, dt);
                         st.script_host.input.reset_frame_input();
 
@@ -279,6 +280,33 @@ pub async fn run_game_with_event_loop(event_loop: EventLoop<()>, config_path: &s
                             }
                         }
 
+                        let text_params: Vec<(u32, String, [f32; 4], i32, glam::Mat4)> = st
+                            .world
+                            .query_mut::<(&Transform3D, &VisualText)>()
+                            .into_iter()
+                            .enumerate()
+                            .map(|(idx, (_id, (tf, vis_text)))| {
+                                let text_len = vis_text.value.len().max(1) as f32;
+                                let aspect_ratio = (text_len * 0.5) * (vis_text.size / 20.0);
+                                let size_matrix = glam::Mat4::from_scale(glam::Vec3::new(aspect_ratio, vis_text.size * 0.05, 1.0));
+                                let final_transform = tf.matrix() * size_matrix;
+                                (idx as u32, vis_text.value.clone(), vis_text.color, vis_text.layer, final_transform)
+                            })
+                            .collect();
+
+                        let text_textures: Vec<(u32, String, i32, glam::Mat4, [f32; 4])> = text_params
+                            .into_iter()
+                            .map(|(idx, val, col, layer, tf)| {
+                                let key = st.texture_manager.get_text_key(
+                                    &st.render_ctx.device,
+                                    &st.render_ctx.queue,
+                                    &val,
+                                    col,
+                                );
+                                (idx, key, layer, tf, col)
+                            })
+                            .collect();
+
                         let mut model_bind_groups_2d: Vec<(
                             i32,
                             wgpu::BindGroup,
@@ -303,6 +331,16 @@ pub async fn run_game_with_event_loop(event_loop: EventLoop<()>, config_path: &s
                                 (vis.layer, bg, vis.texture_path.clone())
                             })
                             .collect();
+
+                        for (_idx, key, layer, final_transform, color) in text_textures {
+                            let (bg, _buf) = st.pipeline_2d.create_model_bind_group(
+                                &st.render_ctx.device,
+                                final_transform,
+                                color,
+                            );
+
+                            model_bind_groups_2d.push((layer, bg, Some(key)));
+                        }
 
                         // Draw lower layers first so background sits behind sprites
                         // and ground/ceiling can cover pipe bottoms.

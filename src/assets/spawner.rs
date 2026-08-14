@@ -55,6 +55,16 @@ pub fn spawn_scene(world: &mut World, scene_path: &str) {
                 _ => None,
             });
 
+            let visual_text = prefab.visual.as_ref().and_then(|v| match v {
+                VisualConfig::Text { value, size, color, layer } => Some(VisualText {
+                    value: value.clone(),
+                    size: *size,
+                    color: color.to_array(),
+                    layer: *layer,
+                }),
+                _ => None,
+            });
+
             let entity_id = entity_cfg.entity_id.unwrap_or_else(rand_id);
 
             let script_comp = prefab.script.as_ref().map(|s| GoScriptComponent {
@@ -63,23 +73,59 @@ pub fn spawn_scene(world: &mut World, scene_path: &str) {
                 tag: entity_cfg.tag.clone(),
             });
 
-            match (visual_3d, visual_2d, script_comp) {
-                (Some(vis3d), _, Some(script)) => {
+            let tag_comp = if !entity_cfg.tag.is_empty() {
+                Some(TagComponent(entity_cfg.tag.clone()))
+            } else {
+                None
+            };
+
+            match (visual_3d, visual_2d, visual_text, script_comp, tag_comp) {
+                (Some(vis3d), _, _, Some(script), Some(tag)) => {
+                    world.spawn((transform, vis3d, script, tag, collider));
+                }
+                (Some(vis3d), _, _, Some(script), None) => {
                     world.spawn((transform, vis3d, script, collider));
                 }
-                (Some(vis3d), _, None) => {
+                (Some(vis3d), _, _, None, Some(tag)) => {
+                    world.spawn((transform, vis3d, tag, collider));
+                }
+                (Some(vis3d), _, _, None, None) => {
                     world.spawn((transform, vis3d, collider));
                 }
-                (None, Some(vis2d), Some(script)) => {
+                (None, Some(vis2d), _, Some(script), Some(tag)) => {
+                    world.spawn((transform, vis2d, script, tag, collider));
+                }
+                (None, Some(vis2d), _, Some(script), None) => {
                     world.spawn((transform, vis2d, script, collider));
                 }
-                (None, Some(vis2d), None) => {
+                (None, Some(vis2d), _, None, Some(tag)) => {
+                    world.spawn((transform, vis2d, tag, collider));
+                }
+                (None, Some(vis2d), _, None, None) => {
                     world.spawn((transform, vis2d, collider));
                 }
-                (None, None, Some(script)) => {
+                (None, None, Some(vistext), Some(script), Some(tag)) => {
+                    world.spawn((transform, vistext, script, tag, collider));
+                }
+                (None, None, Some(vistext), Some(script), None) => {
+                    world.spawn((transform, vistext, script, collider));
+                }
+                (None, None, Some(vistext), None, Some(tag)) => {
+                    world.spawn((transform, vistext, tag, collider));
+                }
+                (None, None, Some(vistext), None, None) => {
+                    world.spawn((transform, vistext, collider));
+                }
+                (None, None, None, Some(script), Some(tag)) => {
+                    world.spawn((transform, script, tag, collider));
+                }
+                (None, None, None, Some(script), None) => {
                     world.spawn((transform, script, collider));
                 }
-                (None, None, None) => {
+                (None, None, None, None, Some(tag)) => {
+                    world.spawn((transform, tag, collider));
+                }
+                (None, None, None, None, None) => {
                     world.spawn((transform, collider));
                 }
             }

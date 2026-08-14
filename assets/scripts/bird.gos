@@ -3,6 +3,7 @@ type BirdController struct {
 	JumpForce float64
 	VelocityY float64
 	Score     int
+	HighScore int
 	IsDead    bool
 	AutoBot   bool
 }
@@ -12,6 +13,7 @@ var self = BirdController{
 	JumpForce:  5.8,
 	VelocityY:  0.0,
 	Score:     0,
+	HighScore: 0,
 	IsDead:    false,
 	AutoBot:   true,
 }
@@ -49,7 +51,6 @@ func OnUpdate(dt float64) {
 			var pipeX = tops[i][0]
 			if pipeX > pos[0] && pipeX < nearestPipeX {
 				nearestPipeX = pipeX
-				// Gap center = top pipe center - (half gap 1.2 + half pipe 3.5)
 				targetY = tops[i][1] - 4.7
 			}
 			i = i + 1
@@ -72,6 +73,7 @@ func OnUpdate(dt float64) {
 	if newY < -4.5 {
 		groot.Warn("[GROOT VM] Bird hit ground! Game over...")
 		groot.SetGameOver(true)
+		groot.SetTextByTag("ScoreText", fmt.Sprintf("GAME OVER!  SCORE: %d  |  HIGH: %d  |  PRESS SPACE", self.Score, self.HighScore))
 		return
 	}
 
@@ -79,6 +81,31 @@ func OnUpdate(dt float64) {
 
 	var tilt = groot.Clamp(self.VelocityY*6.0, -35.0, 40.0)
 	groot.SetSelfRotation3D(0.0, 0.0, tilt)
+
+	// Calculate current score from passed pipes (PipeTop entities with X < -3.0)
+	var pipeTops = groot.GetTagPositions("PipeTop")
+	var passedPipes = 0
+	var k = 0
+	for k < len(pipeTops) {
+		if pipeTops[k][0] < -3.0 {
+			passedPipes = passedPipes + 1
+		}
+		k = k + 1
+	}
+
+	if passedPipes > self.Score {
+		self.Score = passedPipes
+		if self.Score > self.HighScore {
+			self.HighScore = self.Score
+		}
+	}
+
+	var modeStr = "BOT"
+	if !self.AutoBot {
+		modeStr = "MANUAL"
+	}
+
+	groot.SetTextByTag("ScoreText", fmt.Sprintf("SCORE: %d  |  HIGH: %d  |  MODE: %s", self.Score, self.HighScore, modeStr))
 
 	groot.SetSelfCollider(1.0, 1.0, 1.0)
 }

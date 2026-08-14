@@ -133,6 +133,10 @@ fn default_sprite_size() -> (f32, f32) {
     (1.0, 1.0)
 }
 
+fn default_text_size() -> f32 {
+    18.0
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum VisualConfig {
     Sprite {
@@ -141,6 +145,14 @@ pub enum VisualConfig {
         color: RgbaColor,
         #[serde(default)]
         texture: Option<String>,
+        #[serde(default)]
+        layer: i32,
+    },
+    Text {
+        value: String,
+        #[serde(default = "default_text_size")]
+        size: f32,
+        color: RgbaColor,
         #[serde(default)]
         layer: i32,
     },
@@ -271,7 +283,7 @@ mod parse_tests {
             "ambient_light captured"
         );
         assert!(scene.environment.camera.is_some(), "camera captured");
-        assert_eq!(scene.entities.len(), 5);
+        assert_eq!(scene.entities.len(), 6);
     }
 
     #[test]
@@ -284,7 +296,7 @@ mod parse_tests {
             ),
             "orthographic 2D camera with world viewport"
         );
-        assert_eq!(scene.entities.len(), 5);
+        assert_eq!(scene.entities.len(), 6);
     }
 
     #[test]

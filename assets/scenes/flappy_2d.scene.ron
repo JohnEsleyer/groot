@@ -36,5 +36,10 @@
             entity_id: Some(400),
             tag: "Boundary",
         ),
+        (
+            prefab: "assets/prefabs/flappy_hud.prefab.ron",
+            entity_id: Some(500),
+            tag: "ScoreText",
+        ),
     ],
 )
