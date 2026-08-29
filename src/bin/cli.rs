@@ -38,6 +38,7 @@ fn print_help() {
     println!("  new <name>                                - Scaffold a new Groot project");
     println!("  run [--target <t>] [--device <d>] [--bin] - Run Groot game (targets: desktop, android)");
     println!("  build [--target <t>] [--bin]              - Build release bundle (targets: desktop, android)");
+    println!("  pack [input_dir] [output_file]            - Encrypt and pack assets into .gpak archive");
     println!("  plugin                                    - Manage plugins (list, add, remove)");
     println!("  info                                      - Print engine version and workspace info");
     println!("  help                                      - Show this help");
@@ -55,6 +56,7 @@ fn main() {
         "new" => cmd_new(&args[2..]),
         "run" => cmd_run(&args[2..]),
         "build" => cmd_build(&args[2..]),
+        "pack" => cmd_pack(&args[2..]),
         "plugin" => cmd_plugin(&args[2..]),
         "info" => cmd_info(),
         "help" | "--help" | "-h" => print_help(),
@@ -545,6 +547,17 @@ fn cmd_build(args: &[String]) {
             eprintln!("Error: unknown target '{other}'. Use desktop or android.");
             std::process::exit(2);
         }
+    }
+}
+
+fn cmd_pack(args: &[String]) {
+    let input = args.first().map(|s| s.as_str()).unwrap_or("assets");
+    let output = args.get(1).map(|s| s.as_str()).unwrap_or("assets.gpak");
+
+    println!("Encrypting and packaging '{input}' into '{output}'...");
+    match groot::assets::GpakArchive::pack_directory(input, output) {
+        Ok(_) => println!("Successfully created protected archive: {output}"),
+        Err(e) => eprintln!("Error creating package: {e}"),
     }
 }
 

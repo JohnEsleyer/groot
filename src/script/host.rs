@@ -93,14 +93,32 @@ impl GrootScriptHost {
     }
 
     pub fn ensure_engine(&mut self, script_path: &str) -> &mut LoadedScript {
-        let _resolved_path = crate::assets::prepare_script_path(script_path);
         let input_ref = Rc::clone(&self.input);
         let plugin_mgr_ref = &self.plugin_mgr;
 
         self.scripts
             .entry(script_path.to_string())
             .or_insert_with(|| {
-                let mut engine = HotReloadEngine::new(&_resolved_path);
+                // ------------------------------------------------------------------
+                // Build the engine.  In debug desktop builds we use the file-based
+                // HotReloadEngine so live edits are picked up automatically.  In
+                // release (and on Android) we compile directly from the decrypted
+                // in-memory source – no temp file is ever written.
+                // ------------------------------------------------------------------
+                let mut engine = {
+                    #[cfg(all(debug_assertions, not(target_os = "android")))]
+                    {
+                        let resolved = crate::assets::prepare_script_path(script_path);
+                        HotReloadEngine::new(&resolved)
+                    }
+                    #[cfg(not(all(debug_assertions, not(target_os = "android"))))]
+                    {
+                        // Load + decrypt + minify entirely in memory.
+                        let source = crate::assets::load_script_source(script_path)
+                            .unwrap_or_default();
+                        HotReloadEngine::from_str(script_path, &source)
+                    }
+                };
 
                 let vm = &mut engine.vm;
 
@@ -365,6 +383,8 @@ impl GrootScriptHost {
                     Value::Nil
                 });
 
+                // In debug mode, trigger the initial file-based compile.
+                #[cfg(all(debug_assertions, not(target_os = "android")))]
                 let _ = engine.reload_if_changed();
 
                 let metadata = ScriptMetadata {
@@ -377,6 +397,10 @@ impl GrootScriptHost {
     }
 
     pub fn reload_all(&mut self) {
+        // Hot-reload is only meaningful in debug desktop builds where scripts
+        // are read from disk.  In release/Android the source is baked in and
+        // cannot change at runtime.
+        #[cfg(all(debug_assertions, not(target_os = "android")))]
         for loaded in self.scripts.values_mut() {
             if let Ok(reloaded) = loaded.engine.reload_if_changed() {
                 if reloaded {
