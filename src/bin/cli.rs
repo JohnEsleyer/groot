@@ -16,8 +16,10 @@ struct PluginEntry {
     name: String,
     description: String,
     author: String,
-    #[serde(rename = "path")]
-    _path: String,
+    #[serde(default)]
+    path: String,
+    #[serde(default)]
+    repo: String,
 }
 
 #[derive(Debug, Clone)]
@@ -957,7 +959,14 @@ fn cmd_plugin(args: &[String]) {
                         println!();
                         for p in &registry.plugins {
                             println!("  {} — {}", cyan!(&p.name), p.description);
-                            println!("    by {} | groot plugin add {}", p.author, p.name);
+                            if !p.repo.is_empty() {
+                                println!("    by {} | {} | groot plugin add {}", p.author, p.repo, p.name);
+                            } else {
+                                println!("    by {} | groot plugin add {}", p.author, p.name);
+                            }
+                            if !p.path.is_empty() {
+                                println!("    local: {}", p.path);
+                            }
                             println!();
                         }
                     }
@@ -978,7 +987,28 @@ fn cmd_plugin(args: &[String]) {
                 return;
             };
             println!("Installing plugin '{}' into Cargo.toml...", cyan!(name));
-            let dep_line = format!("groot-plugin-{name} = {{ path = \"../groot-plugin-{name}\" }}");
+            // Try to resolve repo/path from registry
+            let dep_line = if let Ok(content) = fs::read_to_string("../groot-plugins/index.ron") {
+                if let Ok(reg) = ron::from_str::<Registry>(&content) {
+                    if let Some(entry) = reg.plugins.iter().find(|p| p.name == *name) {
+                        if !entry.repo.is_empty() {
+                            format!("groot-plugin-{name} = {{ git = \"{}\" }}", entry.repo)
+                        } else if !entry.path.is_empty() {
+                            format!("groot-plugin-{name} = {{ path = \"{}\" }}", entry.path)
+                        } else {
+                            format!("groot-plugin-{name} = {{ path = \"../groot-plugin-{name}\" }}")
+                        }
+                    } else {
+                        eprintln!("{} plugin '{}' not found in registry, using local path fallback", red!("Warning:"), name);
+                        format!("groot-plugin-{name} = {{ path = \"../groot-plugin-{name}\" }}")
+                    }
+                } else {
+                    format!("groot-plugin-{name} = {{ path = \"../groot-plugin-{name}\" }}")
+                }
+            } else {
+                // No registry – fallback to path, but prefer git if we can guess
+                format!("groot-plugin-{name} = {{ git = \"https://github.com/JohnEsleyer/groot-plugin-{name}\" }}")
+            };
             let mut cargo_toml = fs::read_to_string("Cargo.toml").unwrap_or_default();
             if cargo_toml.contains(&format!("groot-plugin-{name}")) {
                 println!("Plugin 'groot-plugin-{name}' is already installed.");
@@ -991,6 +1021,7 @@ fn cmd_plugin(args: &[String]) {
             }
             fs::write("Cargo.toml", cargo_toml).unwrap();
             println!("{} Successfully added 'groot-plugin-{name}' to Cargo.toml!", green!("✓"));
+            println!("  {} {}", cyan!("→"), dep_line);
         }
         "remove" | "rm" => {
             let Some(name) = args.get(1) else {
