@@ -11,7 +11,7 @@ path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-name = "groot-cli"
+name = "groot"
 path = "src/bin/cli.rs"
 
 [[bin]]

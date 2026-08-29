@@ -25,8 +25,75 @@ assets/scripts/*.gos        ──►  GoScript VM (Logic Hot Reloading)  ──
 - `src/platform/` — platform abstraction layer (desktop event loop, Android entry).
 - `src/render/` — pure wgpu rendering engine (3D meshes, 2D sprites, text, gizmos).
 - `src/ecs/` — hecs-based ECS components and queries.
+- `src/assets/` — asset loading, encryption, archive packing (see [Asset Security](#asset-security)).
 - `src/script/` — GoScript VM host, input tracking, script execution.
 - `src/plugin.rs` — plugin trait and manager (re-exports from `groot-plugin-api`).
+
+## Asset Security
+
+Groot ships a built-in asset protection pipeline that prevents plaintext
+inspection of scripts, prefabs, and scenes in release builds.
+
+### Encryption (`src/assets/crypto.rs`)
+
+All assets are encrypted with a **ChaCha20-inspired XOR stream cipher** keyed
+by a compile-time secret and an asset-path nonce. A CRC32 integrity header
+detects tampering. The default key is baked in at compile time; production
+builds can override it at compile time by setting the `GROOT_ENCRYPTION_KEY`
+environment variable before building:
+
+```bash
+GROOT_ENCRYPTION_KEY="MyStrongKey32BytesExactly______!" cargo build --release
+```
+
+| Function | Description |
+|---|---|
+| `encrypt_asset(path, data)` | Encrypt bytes with a path-derived nonce |
+| `decrypt_asset(path, data)` | Decrypt bytes; falls back to raw if not encrypted (debug) |
+| `minify_goscript(source)` | Strip `//` and `/* */` comments + blank lines from `.gos` |
+
+### Binary Archive — `.gpak` (`src/assets/pak.rs`)
+
+Assets can be packed into a single encrypted **`.gpak`** binary archive,
+similar to Unreal `.pak` or Unity asset bundles.
+
+**Archive format:**
+
+```
+[GPAK]  4 bytes  magic
+[u16]   2 bytes  version
+[u32]   4 bytes  entry count
+  per entry:
+  [u16]   path length
+  [N]     UTF-8 relative path
+  [u32]   data length
+  [M]     encrypted payload
+```
+
+Pack via the CLI (see [CLI](#cli)):
+
+```bash
+groot pack assets/ assets.gpak
+```
+
+Open a `.gpak` from Rust:
+
+```rust
+let archive = GpakArchive::open("assets.gpak")?;
+let bytes = archive.entries.get("scripts/player.gos");
+```
+
+### In-Memory & Ephemeral Script Loading (`src/assets/embed.rs`)
+
+| Build mode | Strategy |
+|---|---|
+| `cargo run` (debug, desktop) | Raw `.gos` read from disk — **hot-reload preserved** |
+| `cargo build --release` | Decrypt + minify **in memory** via `HotReloadEngine::from_str` — no temp file |
+| Android | Same as release — fully in-memory |
+
+When a physical path is required (debug hot-reload watcher), `prepare_script_path`
+writes a minified, hashed `.goc` file to `/tmp/.groot_cache/` with **`0600`
+permissions** and registers a panic hook that deletes the cache on process exit.
 
 ## Plugin System
 
@@ -82,19 +149,37 @@ groot plugin remove audio
 ## CLI
 
 ```bash
+# Install the CLI (binary is now `groot`)
+cargo install --path .        # installs `groot` to ~/.cargo/bin
+
 # Scaffold a new project folder
-cargo run --bin groot-cli -- new my-game
+groot new my-game             # or: cargo run --bin groot -- new my-game
 
 # Run the current Groot game
-cargo run --bin groot-cli -- run
+groot run                     # or: cargo run --bin groot -- run
 
 # Build a release bundle
-cargo run --bin groot-cli -- build
+groot build                   # or: cargo run --bin groot -- build
+
+# Pack and encrypt the assets directory into a .gpak archive
+groot pack assets/ assets.gpak
+
+# Scaffold prefabs, scripts, and scenes
+groot generate prefab enemy
+groot generate script player
+groot generate scene arena    # alias: groot g <type> <name>
+
+# Diagnose toolchain (Rust, cargo-apk, Android SDK/NDK, Vulkan)
+groot doctor
+
+# Shell completions
+groot completions bash        # bash|zsh|fish
+# or: groot completions zsh > ~/.zsh/completions/_groot
 
 # Manage plugins
-cargo run --bin groot-cli -- plugin list
-cargo run --bin groot-cli -- plugin add audio
-cargo run --bin groot-cli -- plugin remove audio
+groot plugin list
+groot plugin add audio
+groot plugin remove audio
 ```
 
 ### Multi-Platform Targets
