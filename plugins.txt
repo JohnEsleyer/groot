@@ -3,7 +3,7 @@ Version: 1.0
 Source: ../groot-plugins/index.ron
 Generated: 2026-08-30
 
-Available Plugins (10):
+Available Plugins (18):
 ----------------------
 
 1. audio
@@ -86,6 +86,70 @@ Available Plugins (10):
    Repo: https://github.com/JohnEsleyer/groot-plugin-audio-interactive
    Install: groot plugin add audio-interactive
 
+11. fps-camera
+   Name: fps-camera
+   Description: First-person look, head bob, and camera trauma for Groot FPS
+   Author: John Esleyer
+   Path: ../groot-plugin-fps-camera
+   Repo: https://github.com/JohnEsleyer/groot-plugin-fps-camera
+   Install: groot plugin add fps-camera
+
+12. fps-movement
+   Name: fps-movement
+   Description: Quake/Source style FPS character movement for Groot
+   Author: John Esleyer
+   Path: ../groot-plugin-fps-movement
+   Repo: https://github.com/JohnEsleyer/groot-plugin-fps-movement
+   Install: groot plugin add fps-movement
+
+13. ballistics
+   Name: ballistics
+   Description: Hitscan, projectiles, spread and recoil for Groot FPS
+   Author: John Esleyer
+   Path: ../groot-plugin-ballistics
+   Repo: https://github.com/JohnEsleyer/groot-plugin-ballistics
+   Install: groot plugin add ballistics
+
+14. viewmodel
+   Name: viewmodel
+   Description: Dual-FOV weapon viewmodel and sway for Groot FPS
+   Author: John Esleyer
+   Path: ../groot-plugin-viewmodel
+   Repo: https://github.com/JohnEsleyer/groot-plugin-viewmodel
+   Install: groot plugin add viewmodel
+
+15. decals
+   Name: decals
+   Description: Bullet holes, scorch marks and blood decals for Groot FPS
+   Author: John Esleyer
+   Path: ../groot-plugin-decals
+   Repo: https://github.com/JohnEsleyer/groot-plugin-decals
+   Install: groot plugin add decals
+
+16. particles
+   Name: particles
+   Description: GPU sparks, shell casings and muzzle flashes for Groot FPS
+   Author: John Esleyer
+   Path: ../groot-plugin-particles
+   Repo: https://github.com/JohnEsleyer/groot-plugin-particles
+   Install: groot plugin add particles
+
+17. perception-ai
+   Name: perception-ai
+   Description: Sensory AI vision cones, hearing and cover for Groot FPS
+   Author: John Esleyer
+   Path: ../groot-plugin-perception-ai
+   Repo: https://github.com/JohnEsleyer/groot-plugin-perception-ai
+   Install: groot plugin add perception-ai
+
+18. spatial-audio
+   Name: spatial-audio
+   Description: 3D positional audio and room occlusion for Groot FPS
+   Author: John Esleyer
+   Path: ../groot-plugin-spatial-audio
+   Repo: https://github.com/JohnEsleyer/groot-plugin-spatial-audio
+   Install: groot plugin add spatial-audio
+
 Registry RON:
 (
     version: "1.0",
@@ -100,5 +164,13 @@ Registry RON:
         (name: "gamestate", description: "Zelda-style flag registry, dungeon inventory, and save system", author: "John Esleyer", path: "../groot-plugin-gamestate", repo: "https://github.com/JohnEsleyer/groot-plugin-gamestate"),
         (name: "dialogue", description: "Typewriter dialogue, NPC choices, and cutscene text sequences", author: "John Esleyer", path: "../groot-plugin-dialogue", repo: "https://github.com/JohnEsleyer/groot-plugin-dialogue"),
         (name: "audio-interactive", description: "Dynamic background crossfading and Ocarina melody sequence detection", author: "John Esleyer", path: "../groot-plugin-audio-interactive", repo: "https://github.com/JohnEsleyer/groot-plugin-audio-interactive"),
+        (name: "fps-camera", description: "First-person look, head bob, and camera trauma for Groot FPS", author: "John Esleyer", path: "../groot-plugin-fps-camera", repo: "https://github.com/JohnEsleyer/groot-plugin-fps-camera"),
+        (name: "fps-movement", description: "Quake/Source style FPS character movement for Groot", author: "John Esleyer", path: "../groot-plugin-fps-movement", repo: "https://github.com/JohnEsleyer/groot-plugin-fps-movement"),
+        (name: "ballistics", description: "Hitscan, projectiles, spread and recoil for Groot FPS", author: "John Esleyer", path: "../groot-plugin-ballistics", repo: "https://github.com/JohnEsleyer/groot-plugin-ballistics"),
+        (name: "viewmodel", description: "Dual-FOV weapon viewmodel and sway for Groot FPS", author: "John Esleyer", path: "../groot-plugin-viewmodel", repo: "https://github.com/JohnEsleyer/groot-plugin-viewmodel"),
+        (name: "decals", description: "Bullet holes, scorch marks and blood decals for Groot FPS", author: "John Esleyer", path: "../groot-plugin-decals", repo: "https://github.com/JohnEsleyer/groot-plugin-decals"),
+        (name: "particles", description: "GPU sparks, shell casings and muzzle flashes for Groot FPS", author: "John Esleyer", path: "../groot-plugin-particles", repo: "https://github.com/JohnEsleyer/groot-plugin-particles"),
+        (name: "perception-ai", description: "Sensory AI vision cones, hearing and cover for Groot FPS", author: "John Esleyer", path: "../groot-plugin-perception-ai", repo: "https://github.com/JohnEsleyer/groot-plugin-perception-ai"),
+        (name: "spatial-audio", description: "3D positional audio and room occlusion for Groot FPS", author: "John Esleyer", path: "../groot-plugin-spatial-audio", repo: "https://github.com/JohnEsleyer/groot-plugin-spatial-audio"),
     ]
 )
