@@ -1,0 +1,104 @@
+Groot Plugin Registry (groot-plugins/index.ron)
+Version: 1.0
+Source: ../groot-plugins/index.ron
+Generated: 2026-08-30
+
+Available Plugins (10):
+----------------------
+
+1. audio
+   Name: audio
+   Description: Simple audio synthesizer & sound effects for Groot
+   Author: John Esleyer
+   Path: ../groot-plugin-audio
+   Repo: https://github.com/JohnEsleyer/groot-plugin-audio
+   Install: groot plugin add audio
+
+2. gizmos
+   Name: gizmos
+   Description: 2D/3D debug shape line drawer for Groot
+   Author: John Esleyer
+   Path: ../groot-plugin-gizmos
+   Repo: https://github.com/JohnEsleyer/groot-plugin-gizmos
+   Install: groot plugin add gizmos
+
+3. ztarget
+   Name: ztarget
+   Description: Z-Targeting lock-on & context camera (OoT-style) for Groot
+   Author: John Esleyer
+   Path: ../groot-plugin-ztarget
+   Repo: https://github.com/JohnEsleyer/groot-plugin-ztarget
+   Install: groot plugin add ztarget
+
+4. kinematics
+   Name: kinematics
+   Description: Action-adventure 3D kinematic character controller for Groot
+   Author: John Esleyer
+   Path: ../groot-plugin-kinematics
+   Repo: https://github.com/JohnEsleyer/groot-plugin-kinematics
+   Install: groot plugin add kinematics
+
+5. combat
+   Name: combat
+   Description: Melee swept hitboxes, shield blocking, and damage protocol for Groot
+   Author: John Esleyer
+   Path: ../groot-plugin-combat
+   Repo: https://github.com/JohnEsleyer/groot-plugin-combat
+   Install: groot plugin add combat
+
+6. skeletal
+   Name: skeletal
+   Description: Skeletal animation, bone sockets, and blend trees for Groot
+   Author: John Esleyer
+   Path: ../groot-plugin-skeletal
+   Repo: https://github.com/JohnEsleyer/groot-plugin-skeletal
+   Install: groot plugin add skeletal
+
+7. navmesh
+   Name: navmesh
+   Description: 3D NavMesh spatial pathfinding and AI steering for Groot
+   Author: John Esleyer
+   Path: ../groot-plugin-navmesh
+   Repo: https://github.com/JohnEsleyer/groot-plugin-navmesh
+   Install: groot plugin add navmesh
+
+8. gamestate
+   Name: gamestate
+   Description: Zelda-style flag registry, dungeon inventory, and save system
+   Author: John Esleyer
+   Path: ../groot-plugin-gamestate
+   Repo: https://github.com/JohnEsleyer/groot-plugin-gamestate
+   Install: groot plugin add gamestate
+
+9. dialogue
+   Name: dialogue
+   Description: Typewriter dialogue, NPC choices, and cutscene text sequences
+   Author: John Esleyer
+   Path: ../groot-plugin-dialogue
+   Repo: https://github.com/JohnEsleyer/groot-plugin-dialogue
+   Install: groot plugin add dialogue
+
+10. audio-interactive
+   Name: audio-interactive
+   Description: Dynamic background crossfading and Ocarina melody sequence detection
+   Author: John Esleyer
+   Path: ../groot-plugin-audio-interactive
+   Repo: https://github.com/JohnEsleyer/groot-plugin-audio-interactive
+   Install: groot plugin add audio-interactive
+
+Registry RON:
+(
+    version: "1.0",
+    plugins: [
+        (name: "audio", description: "Simple audio synthesizer & sound effects for Groot", author: "John Esleyer", path: "../groot-plugin-audio", repo: "https://github.com/JohnEsleyer/groot-plugin-audio"),
+        (name: "gizmos", description: "2D/3D debug shape line drawer for Groot", author: "John Esleyer", path: "../groot-plugin-gizmos", repo: "https://github.com/JohnEsleyer/groot-plugin-gizmos"),
+        (name: "ztarget", description: "Z-Targeting lock-on & context camera (OoT-style) for Groot", author: "John Esleyer", path: "../groot-plugin-ztarget", repo: "https://github.com/JohnEsleyer/groot-plugin-ztarget"),
+        (name: "kinematics", description: "Action-adventure 3D kinematic character controller for Groot", author: "John Esleyer", path: "../groot-plugin-kinematics", repo: "https://github.com/JohnEsleyer/groot-plugin-kinematics"),
+        (name: "combat", description: "Melee swept hitboxes, shield blocking, and damage protocol for Groot", author: "John Esleyer", path: "../groot-plugin-combat", repo: "https://github.com/JohnEsleyer/groot-plugin-combat"),
+        (name: "skeletal", description: "Skeletal animation, bone sockets, and blend trees for Groot", author: "John Esleyer", path: "../groot-plugin-skeletal", repo: "https://github.com/JohnEsleyer/groot-plugin-skeletal"),
+        (name: "navmesh", description: "3D NavMesh spatial pathfinding and AI steering for Groot", author: "John Esleyer", path: "../groot-plugin-navmesh", repo: "https://github.com/JohnEsleyer/groot-plugin-navmesh"),
+        (name: "gamestate", description: "Zelda-style flag registry, dungeon inventory, and save system", author: "John Esleyer", path: "../groot-plugin-gamestate", repo: "https://github.com/JohnEsleyer/groot-plugin-gamestate"),
+        (name: "dialogue", description: "Typewriter dialogue, NPC choices, and cutscene text sequences", author: "John Esleyer", path: "../groot-plugin-dialogue", repo: "https://github.com/JohnEsleyer/groot-plugin-dialogue"),
+        (name: "audio-interactive", description: "Dynamic background crossfading and Ocarina melody sequence detection", author: "John Esleyer", path: "../groot-plugin-audio-interactive", repo: "https://github.com/JohnEsleyer/groot-plugin-audio-interactive"),
+    ]
+)
