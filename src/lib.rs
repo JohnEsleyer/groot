@@ -255,13 +255,20 @@ pub async fn run_game_with_event_loop(event_loop: EventLoop<()>, config_path: &s
                             },
                         );
 
-                        let model_bind_groups_3d: Vec<(wgpu::BindGroup, wgpu::Buffer)> = st
+                        // Reuse this frame's uniform buffers: the pools hand out
+                        // the slots they already own, so no GPU buffer is
+                        // allocated per entity per frame.
+                        st.pipeline_3d.uniform_pool.reset();
+                        st.pipeline_2d.uniform_pool.reset();
+
+                        let model_bind_groups_3d: Vec<std::rc::Rc<wgpu::BindGroup>> = st
                             .world
                             .query_mut::<(&Transform3D, &Visual3D)>()
                             .into_iter()
                             .map(|(_id, (tf, vis))| {
                                 st.pipeline_3d.create_model_bind_group(
                                     &st.render_ctx.device,
+                                    &st.render_ctx.queue,
                                     tf.matrix(),
                                     vis.color,
                                 )
@@ -309,7 +316,7 @@ pub async fn run_game_with_event_loop(event_loop: EventLoop<()>, config_path: &s
 
                         let mut model_bind_groups_2d: Vec<(
                             i32,
-                            wgpu::BindGroup,
+                            std::rc::Rc<wgpu::BindGroup>,
                             Option<String>,
                         )> = st
                             .world
@@ -323,8 +330,9 @@ pub async fn run_game_with_event_loop(event_loop: EventLoop<()>, config_path: &s
                                     1.0,
                                 ));
                                 let final_transform = tf.matrix() * size_matrix;
-                                let (bg, _buf) = st.pipeline_2d.create_model_bind_group(
+                                let bg = st.pipeline_2d.create_model_bind_group(
                                     &st.render_ctx.device,
+                                    &st.render_ctx.queue,
                                     final_transform,
                                     vis.color,
                                 );
@@ -333,8 +341,9 @@ pub async fn run_game_with_event_loop(event_loop: EventLoop<()>, config_path: &s
                             .collect();
 
                         for (_idx, key, layer, final_transform, color) in text_textures {
-                            let (bg, _buf) = st.pipeline_2d.create_model_bind_group(
+                            let bg = st.pipeline_2d.create_model_bind_group(
                                 &st.render_ctx.device,
+                                &st.render_ctx.queue,
                                 final_transform,
                                 color,
                             );
@@ -380,8 +389,8 @@ pub async fn run_game_with_event_loop(event_loop: EventLoop<()>, config_path: &s
                             render_pass.set_pipeline(&st.pipeline_3d.render_pipeline);
                             render_pass.set_bind_group(0, &st.camera_bind_group_3d, &[]);
 
-                            for (bind_group, _buf) in &model_bind_groups_3d {
-                                render_pass.set_bind_group(1, bind_group, &[]);
+                            for bind_group in &model_bind_groups_3d {
+                                render_pass.set_bind_group(1, bind_group.as_ref(), &[]);
                                 render_pass.set_vertex_buffer(
                                     0,
                                     st.cube_mesh.vertex_buffer.slice(..),
@@ -402,7 +411,7 @@ pub async fn run_game_with_event_loop(event_loop: EventLoop<()>, config_path: &s
                             render_pass.set_bind_group(0, &st.camera_bind_group_2d, &[]);
 
                             for (_layer, bind_group, tex_path) in &model_bind_groups_2d {
-                                render_pass.set_bind_group(1, bind_group, &[]);
+                                render_pass.set_bind_group(1, bind_group.as_ref(), &[]);
                                 render_pass.set_bind_group(2, st.texture_manager.get_or_default(tex_path.as_deref()), &[]);
                                 render_pass.set_vertex_buffer(
                                     0,

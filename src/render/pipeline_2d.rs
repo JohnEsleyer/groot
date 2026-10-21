@@ -1,9 +1,13 @@
 use crate::render::mesh::Vertex3D;
+use crate::render::uniform_pool::ModelUniformPool;
 
 pub struct Pipeline2D {
     pub render_pipeline: wgpu::RenderPipeline,
     pub camera_bind_group_layout: wgpu::BindGroupLayout,
     pub model_bind_group_layout: wgpu::BindGroupLayout,
+    /// Pooled per-sprite uniform buffers — reused across frames instead of
+    /// allocating a new GPU buffer for every sprite every frame.
+    pub uniform_pool: ModelUniformPool,
 }
 
 impl Pipeline2D {
@@ -98,44 +102,26 @@ impl Pipeline2D {
             render_pipeline,
             camera_bind_group_layout,
             model_bind_group_layout,
+            uniform_pool: ModelUniformPool::new(),
         }
     }
 
+    /// Returns the bind group for a model matrix + colour, reusing a pooled
+    /// uniform buffer. Call [`ModelUniformPool::reset`] once per frame.
     pub fn create_model_bind_group(
-        &self,
+        &mut self,
         device: &wgpu::Device,
+        queue: &wgpu::Queue,
         model: glam::Mat4,
         color: [f32; 4],
-    ) -> (wgpu::BindGroup, wgpu::Buffer) {
-        use wgpu::util::DeviceExt;
-
-        #[repr(C)]
-        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-        struct ModelUniform {
-            model: [[f32; 4]; 4],
-            color: [f32; 4],
-        }
-
-        let uniform = ModelUniform {
-            model: model.to_cols_array_2d(),
+    ) -> std::rc::Rc<wgpu::BindGroup> {
+        self.uniform_pool.acquire(
+            device,
+            queue,
+            &self.model_bind_group_layout,
+            model,
             color,
-        };
-        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("2D Model Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[uniform]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("2D Model Bind Group"),
-            layout: &self.model_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            }],
-        });
-
-        (bind_group, buffer)
+        )
     }
 }
 
