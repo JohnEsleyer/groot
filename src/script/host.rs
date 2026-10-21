@@ -1,9 +1,10 @@
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::Mutex;
 
 use goscript::value::Value;
+use goscript::vm::VirtualMachine;
 use goscript::HotReloadEngine;
 use hecs::World;
 
@@ -75,6 +76,12 @@ pub struct ScriptMetadata {
 pub struct LoadedScript {
     pub engine: HotReloadEngine,
     pub metadata: ScriptMetadata,
+    /// One VM instance per entity running this script.
+    ///
+    /// Every instance owns its own global table, so a script's top-level
+    /// state (`var self = PipeController{...}`) is private to the entity
+    /// instead of being shared by every entity that runs the same file.
+    pub instances: HashMap<u32, VirtualMachine>,
 }
 
 pub struct GrootScriptHost {
@@ -120,268 +127,7 @@ impl GrootScriptHost {
                     }
                 };
 
-                let vm = &mut engine.vm;
-
-                vm.register_groot_module();
-                plugin_mgr_ref.register_all_script_bindings(vm);
-
-                let inp_axis = Rc::clone(&input_ref);
-                vm.register_fn("groot.GetAxis", move |args| {
-                    if let Some(Value::String(axis)) = args.first() {
-                        match axis.as_str() {
-                            "Horizontal" => return Value::Float(inp_axis.move_x.get()),
-                            "Vertical" => return Value::Float(inp_axis.move_y.get()),
-                            _ => {}
-                        }
-                    }
-                    Value::Float(0.0)
-                });
-
-                let inp_key = Rc::clone(&input_ref);
-                vm.register_fn("groot.IsKeyDown", move |args| {
-                    if let Some(key) = args.first().and_then(|v| v.as_string()) {
-                        return Value::Bool(inp_key.keys_down.borrow().iter().any(|k| k == key));
-                    }
-                    Value::Bool(false)
-                });
-
-                let inp_pressed = Rc::clone(&input_ref);
-                vm.register_fn("groot.IsKeyPressed", move |args| {
-                    if let Some(key) = args.first().and_then(|v| v.as_string()) {
-                        return Value::Bool(inp_pressed.keys_just_pressed.borrow().iter().any(|k| k == key));
-                    }
-                    Value::Bool(false)
-                });
-
-                let inp_mouse_down = Rc::clone(&input_ref);
-                vm.register_fn("groot.IsMouseDown", move |args| {
-                    let btn = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as usize;
-                    if btn < 3 {
-                        return Value::Bool(inp_mouse_down.mouse_button_down.get()[btn]);
-                    }
-                    Value::Bool(false)
-                });
-
-                let inp_mouse_pressed = Rc::clone(&input_ref);
-                vm.register_fn("groot.IsMousePressed", move |args| {
-                    let btn = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as usize;
-                    if btn < 3 {
-                        return Value::Bool(inp_mouse_pressed.mouse_button_pressed.get()[btn]);
-                    }
-                    Value::Bool(false)
-                });
-
-                vm.register_fn("groot.GetSelfEntity", |_| {
-                    Value::Int(CURRENT_ENTITY.with(|c| c.get()) as i64)
-                });
-
-                vm.register_fn("groot.GetSelfPosition", |_| {
-                    let s = CURRENT_STATE.with(|st| st.borrow().clone());
-                    Value::Slice(Rc::new(RefCell::new(vec![
-                        Value::Float(s.x as f64),
-                        Value::Float(s.y as f64),
-                        Value::Float(s.z as f64),
-                    ])))
-                });
-
-                vm.register_fn("groot.SetSelfPosition", |args| {
-                    let nx = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let ny = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let nz = args.get(2).and_then(|v| v.as_number());
-                    CURRENT_STATE.with(|st| {
-                        let mut s = st.borrow_mut();
-                        s.x = nx;
-                        s.y = ny;
-                        if let Some(z) = nz {
-                            s.z = z as f32;
-                        }
-                    });
-                    Value::Nil
-                });
-
-                vm.register_fn("groot.SetSelfRotation3D", |args| {
-                    let p = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let y = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let r = args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    CURRENT_STATE.with(|st| {
-                        let mut s = st.borrow_mut();
-                        s.pitch = p;
-                        s.yaw = y;
-                        s.roll = r;
-                    });
-                    Value::Nil
-                });
-
-                vm.register_fn("groot.SetSelfScale", |args| {
-                    let sx = args.first().and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
-                    let sy = args.get(1).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
-                    let sz = args.get(2).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
-                    CURRENT_STATE.with(|st| {
-                        let mut s = st.borrow_mut();
-                        s.scale_x = sx;
-                        s.scale_y = sy;
-                        s.scale_z = sz;
-                    });
-                    Value::Nil
-                });
-
-                vm.register_fn("groot.SetSelfColor", |args| {
-                    let r = args.first().and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
-                    let g = args.get(1).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
-                    let b = args.get(2).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
-                    let a = args.get(3).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
-                    CURRENT_STATE.with(|st| {
-                        st.borrow_mut().color = (r, g, b, a);
-                    });
-                    Value::Nil
-                });
-
-                vm.register_fn("groot.GetEntityPosition", |args| {
-                    let id = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as u32;
-                    let pos = ENTITY_POSITIONS.with(|map| map.borrow().get(&id).copied());
-                    if let Some((x, y, z)) = pos {
-                        Value::Slice(Rc::new(RefCell::new(vec![
-                            Value::Float(x as f64),
-                            Value::Float(y as f64),
-                            Value::Float(z as f64),
-                        ])))
-                    } else {
-                        Value::Slice(Rc::new(RefCell::new(vec![
-                            Value::Float(0.0),
-                            Value::Float(0.0),
-                            Value::Float(0.0),
-                        ])))
-                    }
-                });
-
-                vm.register_fn("groot.GetTagPositions", |args| {
-                    let tag = args.first().and_then(|v| v.as_string()).unwrap_or("").to_string();
-                    let positions = TAG_POSITIONS.with(|map| map.borrow().get(&tag).cloned());
-                    let values: Vec<Value> = positions
-                        .unwrap_or_default()
-                        .into_iter()
-                        .map(|(x, y, z)| {
-                            Value::Slice(Rc::new(RefCell::new(vec![
-                                Value::Float(x as f64),
-                                Value::Float(y as f64),
-                                Value::Float(z as f64),
-                            ])))
-                        })
-                        .collect();
-                    Value::Slice(Rc::new(RefCell::new(values)))
-                });
-
-                vm.register_fn("groot.SetSelfCollider", |args| {
-                    let w = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let h = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let z = args.get(2).and_then(|v| v.as_number());
-                    CURRENT_STATE.with(|st| {
-                        let mut s = st.borrow_mut();
-                        s.collider = match z {
-                            Some(d) => Collider::Box3D { x: w, y: h, z: d as f32 },
-                            None => Collider::Box2D { width: w, height: h },
-                        };
-                    });
-                    Value::Nil
-                });
-
-                vm.register_fn("groot.DestroySelf", |_| {
-                    CURRENT_STATE.with(|st| st.borrow_mut().destroy_requested = true);
-                    Value::Nil
-                });
-
-                vm.register_fn("groot.SetCameraPosition", |args| {
-                    let x = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let y = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let z = args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    CAMERA_COMMANDS.with(|c| {
-                        let mut cam = c.borrow_mut();
-                        cam.pos = (x, y, z);
-                        cam.modified_3d = true;
-                        cam.modified_2d = true;
-                    });
-                    Value::Nil
-                });
-
-                vm.register_fn("groot.GetCameraPosition", |_| {
-                    let pos = CAMERA_COMMANDS.with(|c| c.borrow().pos);
-                    Value::Slice(Rc::new(RefCell::new(vec![
-                        Value::Float(pos.0 as f64),
-                        Value::Float(pos.1 as f64),
-                        Value::Float(pos.2 as f64),
-                    ])))
-                });
-
-                vm.register_fn("groot.SetCameraTarget", |args| {
-                    let x = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let y = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let z = args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    CAMERA_COMMANDS.with(|c| {
-                        let mut cam = c.borrow_mut();
-                        cam.target = (x, y, z);
-                        cam.modified_3d = true;
-                    });
-                    Value::Nil
-                });
-
-                vm.register_fn("groot.SetCameraFov", |args| {
-                    let fov = args.first().and_then(|v| v.as_number()).unwrap_or(60.0) as f32;
-                    CAMERA_COMMANDS.with(|c| {
-                        let mut cam = c.borrow_mut();
-                        cam.fov = fov;
-                        cam.modified_3d = true;
-                    });
-                    Value::Nil
-                });
-
-                vm.register_fn("groot.SetCameraViewport", |args| {
-                    let w = args.first().and_then(|v| v.as_number()).unwrap_or(21.33) as f32;
-                    let h = args.get(1).and_then(|v| v.as_number()).unwrap_or(12.0) as f32;
-                    CAMERA_COMMANDS.with(|c| {
-                        let mut cam = c.borrow_mut();
-                        cam.viewport = (w, h);
-                        cam.modified_2d = true;
-                    });
-                    Value::Nil
-                });
-
-                vm.register_fn("groot.SetSelfText", |args| {
-                    if let Some(text) = args.first().and_then(|v| v.as_string()) {
-                        CURRENT_STATE.with(|st| {
-                            st.borrow_mut().text_value = Some(text.to_string());
-                        });
-                    }
-                    Value::Nil
-                });
-
-                vm.register_fn("groot.SetTextByTag", |args| {
-                    let tag = args.first().and_then(|v| v.as_string()).unwrap_or_default();
-                    let text = args.get(1).and_then(|v| v.as_string()).unwrap_or_default();
-                    if let Ok(mut reqs) = SET_TEXT_BY_TAG_REQUESTS.lock() {
-                        reqs.push((tag.to_string(), text.to_string()));
-                    }
-                    Value::Nil
-                });
-
-                vm.register_fn("groot.DespawnByTag", |args| {
-                    let tag = args.first().and_then(|v| v.as_string()).unwrap_or("").to_string();
-                    if let Ok(mut tags) = DESPAWN_TAGS.lock() {
-                        tags.push(tag);
-                    }
-                    Value::Nil
-                });
-
-                vm.register_fn("groot.SpawnPrefab", |args| {
-                    let path = args.first().and_then(|v| v.as_string()).unwrap_or("").to_string();
-                    let x = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let y = args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let z = args.get(3).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
-                    let tag = args.get(4).and_then(|v| v.as_string()).unwrap_or("").to_string();
-                    if let Ok(mut reqs) = SPAWN_REQUESTS.lock() {
-                        reqs.push(SpawnRequest::Prefab { path, x, y, z, tag });
-                    }
-                    Value::Nil
-                });
+                register_host_api(&mut engine.vm, &input_ref, plugin_mgr_ref);
 
                 // In debug mode, trigger the initial file-based compile.
                 #[cfg(all(debug_assertions, not(target_os = "android")))]
@@ -392,8 +138,62 @@ impl GrootScriptHost {
                     has_on_start: engine.vm.globals.contains_key("OnStart"),
                 };
 
-                LoadedScript { engine, metadata }
+                LoadedScript {
+                    engine,
+                    metadata,
+                    instances: HashMap::new(),
+                }
             })
+    }
+
+    /// Returns the VM instance that runs `script_path` for `entity_id`,
+    /// creating it on first use.
+    ///
+    /// The instance is seeded with a deep copy of the script's globals, so
+    /// every entity owns its own top-level state. Two entities running the
+    /// same script therefore never observe each other's mutations.
+    pub fn ensure_instance(&mut self, script_path: &str, entity_id: u32) -> &mut VirtualMachine {
+        // Make sure the script is loaded and compiled.
+        self.ensure_engine(script_path);
+
+        let loaded = self
+            .scripts
+            .get_mut(script_path)
+            .expect("script was just ensured");
+
+        if !loaded.instances.contains_key(&entity_id) {
+            let mut vm = VirtualMachine::new();
+            register_host_api(&mut vm, &self.input, &self.plugin_mgr);
+            // Seed the instance with the script's globals. Mutable values are
+            // deep-copied, so `var self = PipeController{...}` becomes one
+            // private struct per entity instead of one shared struct.
+            for (name, value) in loaded.engine.vm.globals.iter() {
+                vm.globals.insert(name.clone(), value.deep_clone());
+            }
+            loaded.instances.insert(entity_id, vm);
+        }
+
+        loaded
+            .instances
+            .get_mut(&entity_id)
+            .expect("instance was just created")
+    }
+
+    /// Returns the VM instance of an entity, if it exists.
+    ///
+    /// Useful for engine tooling and tests that need to inspect an entity's
+    /// live script state.
+    pub fn instance(&self, script_path: &str, entity_id: u32) -> Option<&VirtualMachine> {
+        self.scripts
+            .get(script_path)
+            .and_then(|loaded| loaded.instances.get(&entity_id))
+    }
+
+    /// Releases the VM instances of entities that no longer exist.
+    pub fn prune_dead_entities(&mut self, live: &HashSet<u32>) {
+        for loaded in self.scripts.values_mut() {
+            loaded.instances.retain(|id, _| live.contains(id));
+        }
     }
 
     pub fn reload_all(&mut self) {
@@ -406,6 +206,9 @@ impl GrootScriptHost {
                 if reloaded {
                     loaded.metadata.has_on_update = loaded.engine.vm.globals.contains_key("OnUpdate");
                     loaded.metadata.has_on_start = loaded.engine.vm.globals.contains_key("OnStart");
+                    // Hot-swap the new function bodies into every live entity
+                    // instance; each instance keeps its own global state.
+                    sync_instances(loaded);
                     log::info!(
                         "[GROOT SCRIPT] Reloaded with hooks: update={}, start={}",
                         loaded.metadata.has_on_update,
@@ -415,6 +218,296 @@ impl GrootScriptHost {
             }
         }
     }
+}
+
+/// Hot-swaps a freshly compiled script into every live entity instance.
+///
+/// Functions are replaced with the new bytecode. Every other global keeps the
+/// instance's own value (that is the whole point of hot reloading), and
+/// globals the script gained since the last reload are seeded from the
+/// template with a deep copy.
+fn sync_instances(loaded: &mut LoadedScript) {
+    for instance in loaded.instances.values_mut() {
+        for (name, value) in loaded.engine.vm.globals.iter() {
+            match value {
+                Value::Function(_) => {
+                    instance.globals.insert(name.clone(), value.clone());
+                }
+                _ => {
+                    instance
+                        .globals
+                        .entry(name.clone())
+                        .or_insert_with(|| value.deep_clone());
+                }
+            }
+        }
+    }
+}
+
+/// Registers the whole `groot.*` scripting API (plus the plugin bindings) on a
+/// VM. Every VM that runs a script — the compiled template as well as each
+/// per-entity instance — needs the full API surface.
+fn register_host_api(vm: &mut VirtualMachine, input: &Rc<InputState>, plugin_mgr: &PluginManager) {
+    vm.register_groot_module();
+    plugin_mgr.register_all_script_bindings(vm);
+
+    let inp_axis = Rc::clone(input);
+    vm.register_fn("groot.GetAxis", move |args| {
+        if let Some(Value::String(axis)) = args.first() {
+            match axis.as_str() {
+                "Horizontal" => return Value::Float(inp_axis.move_x.get()),
+                "Vertical" => return Value::Float(inp_axis.move_y.get()),
+                _ => {}
+            }
+        }
+        Value::Float(0.0)
+    });
+
+    let inp_key = Rc::clone(input);
+    vm.register_fn("groot.IsKeyDown", move |args| {
+        if let Some(key) = args.first().and_then(|v| v.as_string()) {
+            return Value::Bool(inp_key.keys_down.borrow().iter().any(|k| k == key));
+        }
+        Value::Bool(false)
+    });
+
+    let inp_pressed = Rc::clone(input);
+    vm.register_fn("groot.IsKeyPressed", move |args| {
+        if let Some(key) = args.first().and_then(|v| v.as_string()) {
+            return Value::Bool(inp_pressed.keys_just_pressed.borrow().iter().any(|k| k == key));
+        }
+        Value::Bool(false)
+    });
+
+    let inp_mouse_down = Rc::clone(input);
+    vm.register_fn("groot.IsMouseDown", move |args| {
+        let btn = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as usize;
+        if btn < 3 {
+            return Value::Bool(inp_mouse_down.mouse_button_down.get()[btn]);
+        }
+        Value::Bool(false)
+    });
+
+    let inp_mouse_pressed = Rc::clone(input);
+    vm.register_fn("groot.IsMousePressed", move |args| {
+        let btn = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as usize;
+        if btn < 3 {
+            return Value::Bool(inp_mouse_pressed.mouse_button_pressed.get()[btn]);
+        }
+        Value::Bool(false)
+    });
+
+    vm.register_fn("groot.GetSelfEntity", |_| {
+        Value::Int(CURRENT_ENTITY.with(|c| c.get()) as i64)
+    });
+
+    vm.register_fn("groot.GetSelfPosition", |_| {
+        let s = CURRENT_STATE.with(|st| st.borrow().clone());
+        Value::Slice(Rc::new(RefCell::new(vec![
+            Value::Float(s.x as f64),
+            Value::Float(s.y as f64),
+            Value::Float(s.z as f64),
+        ])))
+    });
+
+    vm.register_fn("groot.SetSelfPosition", |args| {
+        let nx = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+        let ny = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+        let nz = args.get(2).and_then(|v| v.as_number());
+        CURRENT_STATE.with(|st| {
+            let mut s = st.borrow_mut();
+            s.x = nx;
+            s.y = ny;
+            if let Some(z) = nz {
+                s.z = z as f32;
+            }
+        });
+        Value::Nil
+    });
+
+    vm.register_fn("groot.SetSelfRotation3D", |args| {
+        let p = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+        let y = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+        let r = args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+        CURRENT_STATE.with(|st| {
+            let mut s = st.borrow_mut();
+            s.pitch = p;
+            s.yaw = y;
+            s.roll = r;
+        });
+        Value::Nil
+    });
+
+    vm.register_fn("groot.SetSelfScale", |args| {
+        let sx = args.first().and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
+        let sy = args.get(1).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
+        let sz = args.get(2).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
+        CURRENT_STATE.with(|st| {
+            let mut s = st.borrow_mut();
+            s.scale_x = sx;
+            s.scale_y = sy;
+            s.scale_z = sz;
+        });
+        Value::Nil
+    });
+
+    vm.register_fn("groot.SetSelfColor", |args| {
+        let r = args.first().and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
+        let g = args.get(1).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
+        let b = args.get(2).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
+        let a = args.get(3).and_then(|v| v.as_number()).unwrap_or(1.0) as f32;
+        CURRENT_STATE.with(|st| {
+            st.borrow_mut().color = (r, g, b, a);
+        });
+        Value::Nil
+    });
+
+    vm.register_fn("groot.GetEntityPosition", |args| {
+        let id = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as u32;
+        let pos = ENTITY_POSITIONS.with(|map| map.borrow().get(&id).copied());
+        if let Some((x, y, z)) = pos {
+            Value::Slice(Rc::new(RefCell::new(vec![
+                Value::Float(x as f64),
+                Value::Float(y as f64),
+                Value::Float(z as f64),
+            ])))
+        } else {
+            Value::Slice(Rc::new(RefCell::new(vec![
+                Value::Float(0.0),
+                Value::Float(0.0),
+                Value::Float(0.0),
+            ])))
+        }
+    });
+
+    vm.register_fn("groot.GetTagPositions", |args| {
+        let tag = args.first().and_then(|v| v.as_string()).unwrap_or("").to_string();
+        let positions = TAG_POSITIONS.with(|map| map.borrow().get(&tag).cloned());
+        let values: Vec<Value> = positions
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(x, y, z)| {
+                Value::Slice(Rc::new(RefCell::new(vec![
+                    Value::Float(x as f64),
+                    Value::Float(y as f64),
+                    Value::Float(z as f64),
+                ])))
+            })
+            .collect();
+        Value::Slice(Rc::new(RefCell::new(values)))
+    });
+
+    vm.register_fn("groot.SetSelfCollider", |args| {
+        let w = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+        let h = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+        let z = args.get(2).and_then(|v| v.as_number());
+        CURRENT_STATE.with(|st| {
+            let mut s = st.borrow_mut();
+            s.collider = match z {
+                Some(d) => Collider::Box3D { x: w, y: h, z: d as f32 },
+                None => Collider::Box2D { width: w, height: h },
+            };
+        });
+        Value::Nil
+    });
+
+    vm.register_fn("groot.DestroySelf", |_| {
+        CURRENT_STATE.with(|st| st.borrow_mut().destroy_requested = true);
+        Value::Nil
+    });
+
+    vm.register_fn("groot.SetCameraPosition", |args| {
+        let x = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+        let y = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+        let z = args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+        CAMERA_COMMANDS.with(|c| {
+            let mut cam = c.borrow_mut();
+            cam.pos = (x, y, z);
+            cam.modified_3d = true;
+            cam.modified_2d = true;
+        });
+        Value::Nil
+    });
+
+    vm.register_fn("groot.GetCameraPosition", |_| {
+        let pos = CAMERA_COMMANDS.with(|c| c.borrow().pos);
+        Value::Slice(Rc::new(RefCell::new(vec![
+            Value::Float(pos.0 as f64),
+            Value::Float(pos.1 as f64),
+            Value::Float(pos.2 as f64),
+        ])))
+    });
+
+    vm.register_fn("groot.SetCameraTarget", |args| {
+        let x = args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+        let y = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+        let z = args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+        CAMERA_COMMANDS.with(|c| {
+            let mut cam = c.borrow_mut();
+            cam.target = (x, y, z);
+            cam.modified_3d = true;
+        });
+        Value::Nil
+    });
+
+    vm.register_fn("groot.SetCameraFov", |args| {
+        let fov = args.first().and_then(|v| v.as_number()).unwrap_or(60.0) as f32;
+        CAMERA_COMMANDS.with(|c| {
+            let mut cam = c.borrow_mut();
+            cam.fov = fov;
+            cam.modified_3d = true;
+        });
+        Value::Nil
+    });
+
+    vm.register_fn("groot.SetCameraViewport", |args| {
+        let w = args.first().and_then(|v| v.as_number()).unwrap_or(21.33) as f32;
+        let h = args.get(1).and_then(|v| v.as_number()).unwrap_or(12.0) as f32;
+        CAMERA_COMMANDS.with(|c| {
+            let mut cam = c.borrow_mut();
+            cam.viewport = (w, h);
+            cam.modified_2d = true;
+        });
+        Value::Nil
+    });
+
+    vm.register_fn("groot.SetSelfText", |args| {
+        if let Some(text) = args.first().and_then(|v| v.as_string()) {
+            CURRENT_STATE.with(|st| {
+                st.borrow_mut().text_value = Some(text.to_string());
+            });
+        }
+        Value::Nil
+    });
+
+    vm.register_fn("groot.SetTextByTag", |args| {
+        let tag = args.first().and_then(|v| v.as_string()).unwrap_or_default();
+        let text = args.get(1).and_then(|v| v.as_string()).unwrap_or_default();
+        if let Ok(mut reqs) = SET_TEXT_BY_TAG_REQUESTS.lock() {
+            reqs.push((tag.to_string(), text.to_string()));
+        }
+        Value::Nil
+    });
+
+    vm.register_fn("groot.DespawnByTag", |args| {
+        let tag = args.first().and_then(|v| v.as_string()).unwrap_or("").to_string();
+        if let Ok(mut tags) = DESPAWN_TAGS.lock() {
+            tags.push(tag);
+        }
+        Value::Nil
+    });
+
+    vm.register_fn("groot.SpawnPrefab", |args| {
+        let path = args.first().and_then(|v| v.as_string()).unwrap_or("").to_string();
+        let x = args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+        let y = args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+        let z = args.get(3).and_then(|v| v.as_number()).unwrap_or(0.0) as f32;
+        let tag = args.get(4).and_then(|v| v.as_string()).unwrap_or("").to_string();
+        if let Ok(mut reqs) = SPAWN_REQUESTS.lock() {
+            reqs.push(SpawnRequest::Prefab { path, x, y, z, tag });
+        }
+        Value::Nil
+    });
 }
 
 pub fn sync_camera_commands(cam_3d: &mut crate::render::Camera3D, cam_2d: &mut crate::render::Camera2D) {
@@ -493,11 +586,13 @@ pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
             s.text_value = None;
         });
 
-        let loaded = host.ensure_engine(&comp.script_path);
+        // Each entity runs the script on its own VM instance, so top-level
+        // script state (`var self = ...`) is private to the entity.
+        let vm = host.ensure_instance(&comp.script_path, comp.entity_id);
 
-        if loaded.metadata.has_on_update {
-            loaded.engine.vm.set_delta_time(dt);
-            if let Err(e) = loaded.engine.vm.call("OnUpdate", vec![Value::Float(dt)]) {
+        if vm.globals.contains_key("OnUpdate") {
+            vm.set_delta_time(dt);
+            if let Err(e) = vm.call("OnUpdate", vec![Value::Float(dt)]) {
                 log::error!("[GROOT SCRIPT ERROR] entity #{}: {e}", comp.entity_id);
             }
         }
@@ -656,5 +751,133 @@ pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
                 }
             }
         }
+    }
+
+    // Release the script instances of entities that no longer exist (they
+    // were despawned, or their prefab was replaced).
+    let live: HashSet<u32> = world
+        .query::<&GoScriptComponent>()
+        .iter()
+        .map(|(_entity, comp)| comp.entity_id)
+        .collect();
+    host.prune_dead_entities(&live);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    /// Writes a temporary script file and returns its path.
+    fn temp_script(name: &str, source: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(name);
+        fs::write(&path, source).unwrap();
+        path
+    }
+
+    /// Reads a global out of an entity's script instance.
+    fn global_of(host: &GrootScriptHost, script_path: &str, entity_id: u32, name: &str) -> String {
+        host.instance(script_path, entity_id)
+            .unwrap_or_else(|| panic!("no instance for entity #{entity_id}"))
+            .globals
+            .get(name)
+            .unwrap_or_else(|| panic!("no global '{name}'"))
+            .to_string()
+    }
+
+    #[test]
+    fn entities_get_isolated_script_state() {
+        let path = temp_script(
+            "groot_isolation_test.gos",
+            "var counter = 0\n\
+             func Bump() int {\n\
+                 counter = counter + 1\n\
+                 return counter\n\
+             }\n",
+        );
+        let script_path = path.to_str().unwrap().to_string();
+
+        let mut host = GrootScriptHost::new();
+
+        // Entity #1 bumps twice, entity #2 bumps once.
+        {
+            let vm = host.ensure_instance(&script_path, 1);
+            vm.call("Bump", vec![]).unwrap();
+            vm.call("Bump", vec![]).unwrap();
+        }
+        {
+            let vm = host.ensure_instance(&script_path, 2);
+            vm.call("Bump", vec![]).unwrap();
+        }
+
+        // A shared VM would report 2 and 3 — each entity owns its counter.
+        assert_eq!(global_of(&host, &script_path, 1, "counter"), "2");
+        assert_eq!(global_of(&host, &script_path, 2, "counter"), "1");
+
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn hot_reload_swaps_code_but_keeps_entity_state() {
+        let path = temp_script(
+            "groot_hot_reload_test.gos",
+            "var counter = 0\n\
+             func Bump() int {\n\
+                 counter = counter + 1\n\
+                 return counter\n\
+             }\n",
+        );
+        let script_path = path.to_str().unwrap().to_string();
+
+        let mut host = GrootScriptHost::new();
+        {
+            let vm = host.ensure_instance(&script_path, 1);
+            vm.call("Bump", vec![]).unwrap();
+        }
+        assert_eq!(global_of(&host, &script_path, 1, "counter"), "1");
+
+        // Rewrite the script with a different body.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        fs::write(
+            &path,
+            "var counter = 0\n\
+             func Bump() int {\n\
+                 counter = counter + 10\n\
+                 return counter\n\
+             }\n",
+        )
+        .unwrap();
+
+        host.reload_all();
+
+        {
+            let vm = host.ensure_instance(&script_path, 1);
+            vm.call("Bump", vec![]).unwrap();
+        }
+
+        // The new body ran (1 + 10) and the live state survived the swap.
+        assert_eq!(global_of(&host, &script_path, 1, "counter"), "11");
+
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn dead_entities_release_their_instances() {
+        let path = temp_script(
+            "groot_prune_test.gos",
+            "func Bump() int { return 1 }\n",
+        );
+        let script_path = path.to_str().unwrap().to_string();
+
+        let mut host = GrootScriptHost::new();
+        host.ensure_instance(&script_path, 7);
+        assert!(host.instance(&script_path, 7).is_some());
+
+        let live: HashSet<u32> = HashSet::new();
+        host.prune_dead_entities(&live);
+        assert!(host.instance(&script_path, 7).is_none());
+
+        let _ = fs::remove_file(&path);
     }
 }
