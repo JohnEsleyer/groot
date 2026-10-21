@@ -59,7 +59,7 @@ pub fn ensure_instance(&mut self, script_path: &str, entity_id: u32) -> &mut Vir
     let loaded = self.scripts.get_mut(script_path).expect("…");
     if !loaded.instances.contains_key(&entity_id) {
         let mut vm = VirtualMachine::new();
-        register_host_api(&mut vm, &self.input, &self.plugin_mgr);
+        register_host_api(&mut vm, &self.input);
         for (name, value) in loaded.engine.vm.globals.iter() {
             vm.globals.insert(name.clone(), value.deep_clone());  // ← the isolation
         }
@@ -78,9 +78,8 @@ scene-graph-like state clones safely).
 Every VM — template or instance — gets the complete `groot.*` surface:
 
 ```rust
-fn register_host_api(vm: &mut VirtualMachine, input: &Rc<InputState>, plugin_mgr: &PluginManager) {
+fn register_host_api(vm: &mut VirtualMachine, input: &Rc<InputState>) {
     vm.register_groot_module();                     // stateless helpers
-    plugin_mgr.register_all_script_bindings(vm);    // plugin packages
     // … entity context, input, camera, spawning …
 }
 ```
@@ -95,28 +94,27 @@ closure works for every instance.
 ```rust
 pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
     host.reload_all();                              // 1. hot-reload changed scripts
-    host.plugin_mgr.update_all(world, dt);          // 2. plugin per-frame work
 
-    // 3. snapshot positions + tags for the queries scripts make
+    // 2. snapshot positions + tags for the queries scripts make
     ENTITY_POSITIONS.with(/* … */);
     TAG_POSITIONS.with(/* … */);
 
-    // 4. run every script entity
+    // 3. run every script entity
     for (entity, (comp, tf, vis3d, vis2d, vistext, collider)) in
         world.query_mut::<(&GoScriptComponent, &mut Transform3D, …)>()
     {
-        // 4a. load the entity's world state into the thread-local
+        // 3a. load the entity's world state into the thread-local
         CURRENT_ENTITY.with(|c| c.set(comp.entity_id));
         CURRENT_STATE.with(|st| { st.borrow_mut().x = tf.position.x; /* … */ });
 
-        // 4b. run the script on this entity's own VM
+        // 3b. run the script on this entity's own VM
         let vm = host.ensure_instance(&comp.script_path, comp.entity_id);
         if vm.globals.contains_key("OnUpdate") {
             vm.set_delta_time(dt);
             vm.call("OnUpdate", vec![Value::Float(dt)]);
         }
 
-        // 4c. write the (possibly modified) state back into the ECS
+        // 3c. write the (possibly modified) state back into the ECS
         CURRENT_STATE.with(|st| {
             tf.position = glam::Vec3::new(s.x, s.y, s.z);
             tf.rotation = glam::Vec3::new(s.pitch, s.yaw, s.roll);
@@ -125,8 +123,8 @@ pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
         });
     }
 
-    // 5. apply deferred commands (spawn, despawn, text, …)
-    // 6. release the instances of entities that no longer exist
+    // 4. apply deferred commands (spawn, despawn, text, …)
+    // 5. release the instances of entities that no longer exist
 }
 ```
 

@@ -134,31 +134,6 @@ anywhere, including outside a frame.
 
 The flag is a process-wide switch the demo scripts use to stop gameplay.
 
-## Plugin packages
-
-Plugins register their own dotted packages through `groot-plugin-api`:
-
-| Package | Functions |
-| --- | --- |
-| `groot_audio` | `PlayBeep(freq, duration)`, `PlayTone(freq, duration)` |
-| `groot_gizmos` | `DrawBox(...)`, `DrawLine(...)`, `DrawCircle(...)` |
-
-A plugin implements `GrootPlugin`:
-
-```rust
-impl GrootPlugin for MyPlugin {
-    fn name(&self) -> &'static str { "my-plugin" }
-    fn register_script_bindings(&self, vm: &mut VirtualMachine) {
-        vm.register_fn("my_plugin.DoThing", |args| { /* … */ Value::Nil });
-    }
-    fn update(&mut self, world: &mut World, dt: f64) { /* per-frame work */ }
-}
-```
-
-`register_script_bindings` is called for **every** VM that runs a script — the
-compiled template and each per-entity instance — so a plugin never has to
-know how many entities exist.
-
 ## A complete script
 
 ```go

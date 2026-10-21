@@ -2,7 +2,6 @@ pub mod assets;
 pub mod ecs;
 pub mod groot_module;
 pub mod platform;
-pub mod plugin;
 pub mod render;
 pub mod script;
 

@@ -38,18 +38,11 @@ env_logger = "0.11"
 # GoScript scripting engine
 goscript = { git = "https://github.com/johnesleyer/goscript", branch = "main" }
 
-# Plugin API
-groot-plugin-api = { git = "https://github.com/JohnEsleyer/groot-plugin-api" }
-
 # Binary asset embedding
 rust-embed = { version = "8.4", features = ["debug-embed"] }
 
 # PNG image decoding for 2D sprite textures
 image = { version = "0.25", default-features = false, features = ["png"] }
-
-groot-plugin-audio = { git = "https://github.com/JohnEsleyer/groot-plugin-audio" }
-
-groot-plugin-gizmos = { git = "https://github.com/JohnEsleyer/groot-plugin-gizmos" }
 
 # Patch goscript to use local copy
 [patch."https://github.com/johnesleyer/goscript"]

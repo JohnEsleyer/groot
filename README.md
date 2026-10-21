@@ -27,7 +27,6 @@ assets/scripts/*.gos        ──►  GoScript VM (Logic Hot Reloading)  ──
 - `src/ecs/` — hecs-based ECS components and queries.
 - `src/assets/` — asset loading, encryption, archive packing (see [Asset Security](#asset-security)).
 - `src/script/` — GoScript VM host, input tracking, script execution.
-- `src/plugin.rs` — plugin trait and manager (re-exports from `groot-plugin-api`).
 
 ## Asset Security
 
@@ -95,57 +94,6 @@ When a physical path is required (debug hot-reload watcher), `prepare_script_pat
 writes a minified, hashed `.goc` file to `/tmp/.groot_cache/` with **`0600`
 permissions** and registers a panic hook that deletes the cache on process exit.
 
-## Plugin System
-
-Groot supports native Rust plugins via the `GrootPlugin` trait. Plugins are
-managed through the CLI and compiled as separate crates that depend on the
-shared `groot-plugin-api` crate.
-
-### Architecture
-
-```
-groot-plugin-api      ──►  Defines GrootPlugin trait + PluginManager
-groot-plugin-audio    ──►  Sample audio synthesizer plugin
-groot-plugin-gizmos   ──►  Sample debug shape drawer plugin
-groot-plugins/        ──►  Plugin registry (index.ron)
-```
-
-### Writing a Plugin
-
-```rust
-use groot_plugin_api::{GrootPlugin, VirtualMachine};
-use goscript::value::Value;
-
-pub struct MyPlugin;
-
-impl GrootPlugin for MyPlugin {
-    fn name(&self) -> &'static str {
-        "my-plugin"
-    }
-
-    fn register_script_bindings(&self, vm: &mut VirtualMachine) {
-        vm.register_fn("my_plugin.DoThing", |args| {
-            let x = args.first().and_then(|v| v.as_number()).unwrap_or(0.0);
-            log::info!("[MY PLUGIN] Doing thing at {x}");
-            Value::Nil
-        });
-    }
-}
-```
-
-### CLI Plugin Commands
-
-```bash
-# List available plugins
-groot plugin list
-
-# Install a plugin (adds to Cargo.toml)
-groot plugin add audio
-
-# Remove a plugin
-groot plugin remove audio
-```
-
 ## CLI
 
 ```bash
@@ -175,11 +123,6 @@ groot doctor
 # Shell completions
 groot completions bash        # bash|zsh|fish
 # or: groot completions zsh > ~/.zsh/completions/_groot
-
-# Manage plugins
-groot plugin list
-groot plugin add audio
-groot plugin remove audio
 ```
 
 ### Multi-Platform Targets
@@ -252,7 +195,6 @@ func OnUpdate(dt float64) {
 - `ron` 0.8 - Rusty Object Notation for assets
 - `serde` 1 - Serialization framework
 - `goscript` (git: `github.com/johnesleyer/goscript`) - GoScript VM
-- `groot-plugin-api` - Shared plugin trait and manager
 
 ## Case Studies
 

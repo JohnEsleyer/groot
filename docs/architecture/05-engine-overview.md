@@ -1,6 +1,6 @@
 # 05 — Engine Overview
 
-The engine around the VM: ECS, rendering, assets, plugins and the frame loop.
+The engine around the VM: ECS, rendering, assets and the frame loop.
 
 ```
                     ┌──────────────────────────────────────────┐
@@ -22,9 +22,6 @@ The engine around the VM: ECS, rendering, assets, plugins and the frame loop.
 | Crate | Role |
 | --- | --- |
 | `groot` (lib + bin) | The engine: wgpu rendering, hecs ECS, GoScript host. |
-| `groot-plugin-api` | The `GrootPlugin` trait and `PluginManager`. Plugins depend on this, never on `groot` — that avoids a cycle. |
-| `groot-plugin-audio` | Sample plugin: the `groot_audio` package. |
-| `groot-plugin-gizmos` | Sample plugin: the `groot_gizmos` package. |
 | `goscript` | The scripting language (path-patched from the sibling checkout). |
 
 ## The ECS
@@ -110,29 +107,6 @@ original path so the engine can pick up edits); in release builds they are
 encrypted and embedded into the binary, and scripts are compiled from the
 in-memory source with no temporary file ever written to disk.
 
-## Plugins
-
-A plugin implements `GrootPlugin` (from `groot-plugin-api`):
-
-```rust
-pub trait GrootPlugin {
-    fn name(&self) -> &'static str;
-    fn register_script_bindings(&self, vm: &mut VirtualMachine);
-    fn update(&mut self, world: &mut World, dt: f64) {}
-}
-```
-
-* `register_script_bindings` adds host functions to the `groot_*` package
-  namespace. It is called for **every** VM that runs a script.
-* `update` runs once per frame, before the scripts, with the world.
-
-The CLI can install plugins from a registry index or a local path:
-
-```
-groot plugin add audio
-groot plugin list
-```
-
 ## The CLI
 
 `src/bin/cli.rs` is the `groot` binary:
@@ -145,7 +119,6 @@ groot plugin list
 | `groot doctor` | Check the toolchain and the project layout. |
 | `groot generate script\|prefab\|scene` | Scaffold a script/prefab/scene. |
 | `groot pack` | Pack the assets into an archive. |
-| `groot plugin add\|remove\|list` | Manage plugins. |
 | `groot info` | Show project information. |
 | `groot completions <shell>` | Shell completions (bash/zsh/fish). |
 

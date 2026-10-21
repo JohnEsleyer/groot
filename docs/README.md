@@ -9,7 +9,7 @@ These documents describe the two halves of that system:
 | Section | What it covers |
 | --- | --- |
 | [`language/`](language/) | **The GoScript language** — syntax, semantics, values, standard library, and the `groot.*` host API that scripts use to talk to the engine. |
-| [`architecture/`](architecture/) | **How it is built** — the compiler pipeline, the bytecode VM, hot reloading, the per-entity script runtime, and the engine itself (ECS, rendering, assets, plugins). |
+| [`architecture/`](architecture/) | **How it is built** — the compiler pipeline, the bytecode VM, hot reloading, the per-entity script runtime, and the engine itself (ECS, rendering, assets). |
 
 Other material in this folder:
 

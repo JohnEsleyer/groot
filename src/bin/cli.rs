@@ -3,25 +3,6 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use serde::Deserialize;
-
-#[derive(Deserialize)]
-struct Registry {
-    version: String,
-    plugins: Vec<PluginEntry>,
-}
-
-#[derive(Deserialize)]
-struct PluginEntry {
-    name: String,
-    description: String,
-    author: String,
-    #[serde(default)]
-    path: String,
-    #[serde(default)]
-    repo: String,
-}
-
 #[derive(Debug, Clone)]
 struct AdbDevice {
     serial: String,
@@ -86,11 +67,7 @@ fn print_help() {
         cyan!("pack")
     );
     println!();
-    println!("{}", bold!("Plugins & Info:"));
-    println!(
-        "  {} <list|add|rm>      - Manage native plugins",
-        cyan!("plugin")
-    );
+    println!("{}", bold!("Info:"));
     println!(
         "  {}                    - Print engine and workspace diagnostics",
         cyan!("info")
@@ -121,7 +98,6 @@ fn main() {
         "generate" | "g" => cmd_generate(&args[2..]),
         "pack" => cmd_pack(&args[2..]),
         "completions" => cmd_completions(&args[2..]),
-        "plugin" => cmd_plugin(&args[2..]),
         "info" => cmd_info(),
         "help" | "--help" | "-h" => print_help(),
         "version" | "--version" | "-V" => println!("groot {VERSION}"),
@@ -402,7 +378,7 @@ fn cmd_completions(args: &[String]) {
                 r#"# Groot bash completions - source this or place in /etc/bash_completion.d/
 _groot_completions() {{
     local cur="${{COMP_WORDS[COMP_CWORD]}}"
-    local cmds="new run build doctor generate g pack plugin info help version completions"
+    local cmds="new run build doctor generate g pack info help version completions"
     COMPREPLY=( $(compgen -W "$cmds" -- "$cur") )
 }}
 complete -F _groot_completions groot
@@ -422,7 +398,6 @@ _groot() {{
         'generate:Scaffold prefab/script/scene'
         'g:Alias for generate'
         'pack:Pack & encrypt assets'
-        'plugin:Manage plugins'
         'info:Print engine info'
         'completions:Generate shell completions'
     )
@@ -442,7 +417,6 @@ complete -c groot -n "__fish_use_subcommand" -a build -d "Build release"
 complete -c groot -n "__fish_use_subcommand" -a doctor -d "Check toolchains"
 complete -c groot -n "__fish_use_subcommand" -a generate -d "Scaffold asset"
 complete -c groot -n "__fish_use_subcommand" -a pack -d "Pack assets"
-complete -c groot -n "__fish_use_subcommand" -a plugin -d "Manage plugins"
 complete -c groot -n "__fish_use_subcommand" -a info -d "Print info"
 complete -c groot -n "__fish_use_subcommand" -a completions -d "Generate completions"
 "#
@@ -940,104 +914,6 @@ fn cmd_build(args: &[String]) {
             eprintln!("{} unknown target '{}'. Use desktop or android.", red!("Error:"), other);
             std::process::exit(2);
         }
-    }
-}
-
-fn cmd_plugin(args: &[String]) {
-    let Some(subcmd) = args.first() else {
-        println!("Usage: groot plugin <list|add|remove> [name]");
-        return;
-    };
-
-    match subcmd.as_str() {
-        "list" => {
-            let registry_path = std::path::Path::new("../groot-plugins/index.ron");
-            if let Ok(content) = fs::read_to_string(registry_path) {
-                match ron::from_str::<Registry>(&content) {
-                    Ok(registry) => {
-                        println!("Groot Plugins (registry v{})", registry.version);
-                        println!();
-                        for p in &registry.plugins {
-                            println!("  {} — {}", cyan!(&p.name), p.description);
-                            if !p.repo.is_empty() {
-                                println!("    by {} | {} | groot plugin add {}", p.author, p.repo, p.name);
-                            } else {
-                                println!("    by {} | groot plugin add {}", p.author, p.name);
-                            }
-                            if !p.path.is_empty() {
-                                println!("    local: {}", p.path);
-                            }
-                            println!();
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("{} parsing plugin registry: {e}", red!("Error:"));
-                    }
-                }
-            } else {
-                eprintln!("{} No plugin registry found at ../groot-plugins/index.ron", red!("Notice:"));
-                eprintln!("Available plugins:");
-                eprintln!("  {}   — Simple audio synthesizer & sound effects", cyan!("audio"));
-                eprintln!("  {}  — 2D/3D debug shape line drawer", cyan!("gizmos"));
-            }
-        }
-        "add" => {
-            let Some(name) = args.get(1) else {
-                eprintln!("{} missing plugin name. Usage: groot plugin add <name>", red!("Error:"));
-                return;
-            };
-            println!("Installing plugin '{}' into Cargo.toml...", cyan!(name));
-            // Try to resolve repo/path from registry
-            let dep_line = if let Ok(content) = fs::read_to_string("../groot-plugins/index.ron") {
-                if let Ok(reg) = ron::from_str::<Registry>(&content) {
-                    if let Some(entry) = reg.plugins.iter().find(|p| p.name == *name) {
-                        if !entry.repo.is_empty() {
-                            format!("groot-plugin-{name} = {{ git = \"{}\" }}", entry.repo)
-                        } else if !entry.path.is_empty() {
-                            format!("groot-plugin-{name} = {{ path = \"{}\" }}", entry.path)
-                        } else {
-                            format!("groot-plugin-{name} = {{ path = \"../groot-plugin-{name}\" }}")
-                        }
-                    } else {
-                        eprintln!("{} plugin '{}' not found in registry, using local path fallback", red!("Warning:"), name);
-                        format!("groot-plugin-{name} = {{ path = \"../groot-plugin-{name}\" }}")
-                    }
-                } else {
-                    format!("groot-plugin-{name} = {{ path = \"../groot-plugin-{name}\" }}")
-                }
-            } else {
-                // No registry – fallback to path, but prefer git if we can guess
-                format!("groot-plugin-{name} = {{ git = \"https://github.com/JohnEsleyer/groot-plugin-{name}\" }}")
-            };
-            let mut cargo_toml = fs::read_to_string("Cargo.toml").unwrap_or_default();
-            if cargo_toml.contains(&format!("groot-plugin-{name}")) {
-                println!("Plugin 'groot-plugin-{name}' is already installed.");
-                return;
-            }
-            if let Some(pos) = cargo_toml.find("[profile.dev]") {
-                cargo_toml.insert_str(pos, &format!("{dep_line}\n\n"));
-            } else {
-                cargo_toml.push_str(&format!("\n{dep_line}\n"));
-            }
-            fs::write("Cargo.toml", cargo_toml).unwrap();
-            println!("{} Successfully added 'groot-plugin-{name}' to Cargo.toml!", green!("✓"));
-            println!("  {} {}", cyan!("→"), dep_line);
-        }
-        "remove" | "rm" => {
-            let Some(name) = args.get(1) else {
-                eprintln!("{} missing plugin name. Usage: groot plugin remove <name>", red!("Error:"));
-                return;
-            };
-            println!("Removing plugin '{}' from Cargo.toml...", cyan!(name));
-            let cargo_toml = fs::read_to_string("Cargo.toml").unwrap_or_default();
-            let filtered: Vec<&str> = cargo_toml
-                .lines()
-                .filter(|line| !line.contains(&format!("groot-plugin-{name}")))
-                .collect();
-            fs::write("Cargo.toml", filtered.join("\n")).unwrap();
-            println!("{} Successfully removed 'groot-plugin-{name}'!", green!("✓"));
-        }
-        _ => println!("Unknown plugin command. Use list, add, or remove."),
     }
 }
 

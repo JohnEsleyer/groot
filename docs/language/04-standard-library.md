@@ -104,19 +104,11 @@ var csv = strings.Join(parts, ";")        // "a;b;c"
 
 ## Engine packages
 
-Beyond the standard library, Groot registers its own packages. These are
+Beyond the standard library, Groot registers its own package. It is
 documented separately:
 
 * [`05-groot-host-api.md`](05-groot-host-api.md) — `groot.*`: entity context,
   transforms, camera, spawning, collisions, logging.
-* `groot_audio.*` — from the `groot-plugin-audio` plugin
-  (`PlayBeep`, `PlayTone`).
-* `groot_gizmos.*` — from the `groot-plugin-gizmos` plugin
-  (`DrawBox`, `DrawLine`, `DrawCircle`).
-
-Plugin packages are registered the same way as the built-ins: a Rust closure
-under a dotted name. Any crate that depends on `groot-plugin-api` can add its
-own package.
 
 ## Adding a function
 

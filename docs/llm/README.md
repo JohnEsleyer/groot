@@ -12,11 +12,7 @@ Groot is a data-driven hybrid 2D/3D engine:
 - **Presentation & ECS** — wgpu 0.19 (rendering) + winit 0.29 (windowing) + hecs 0.10 (ECS).
 
 ### Crate structure
-- `groot-plugin-api` (library) — shared `GrootPlugin` trait and `PluginManager`
 - `groot` (binary + library) — the game engine: wgpu rendering, hecs ECS, GoScript VM
-- `groot-plugin-audio` (library) — sample audio plugin
-- `groot-plugin-gizmos` (library) — sample gizmos plugin
-- `groot-plugins` — plugin registry index
 
 ### Key files
 | File | Purpose |
@@ -25,13 +21,12 @@ Groot is a data-driven hybrid 2D/3D engine:
 | `assets/prefabs/*.prefab.ron` | RON prefabs: 2D/3D visuals, colliders, scripts, child hierarchies |
 | `assets/scenes/*.scene.ron` | Scene layout: camera, lighting, entity instantiation |
 | `src/main.rs` | Initializes winit window + wgpu context, runs main event loop |
-| `src/lib.rs` | Library root: exposes `plugin`, `ecs`, `render`, `assets` modules |
-| `src/plugin.rs` | Re-exports `GrootPlugin` and `PluginManager` from `groot-plugin-api` |
+| `src/lib.rs` | Library root: exposes `ecs`, `render`, `assets` modules |
 | `src/render/` | wgpu rendering: camera, mesh pipeline, 3D PBR |
 | `src/ecs/` | hecs ECS components and queries |
 | `src/script/` | GoScript VM host, input tracking, script execution |
 | `src/groot_module.rs` | Stateless utility functions (math, logging) |
-| `src/bin/cli.rs` | `groot` CLI — scaffolds, runs, builds, manages plugins |
+| `src/bin/cli.rs` | `groot` CLI — scaffolds, runs, builds, packs assets |
 
 ---
 
@@ -43,9 +38,8 @@ Groot is a data-driven hybrid 2D/3D engine:
 - **No global entity-state map.** Self state flows through thread-local scratch (`CURRENT_ENTITY` + `CURRENT_STATE`), synced to/from ECS components each frame.
 - **`static Mutex` only for cross-system queues:** `SPAWN_REQUESTS`, `SCRIPT_EVENTS`.
 - **Visuals are RON data.** To change how something looks, edit a `.prefab.ron` file.
-- **Plugins depend on `groot-plugin-api`, NOT on `groot` directly.** This avoids cyclic dependencies.
 - **One VM instance per entity.** `LoadedScript` owns the compiled template *and* one `VirtualMachine` per entity (`instances`). Entity script state must never be shared — seed instances with `Value::deep_clone()` of the template's globals, and hot-swap functions only. See [`../architecture/04-script-runtime.md`](../architecture/04-script-runtime.md).
-- **Register host APIs per VM.** `register_host_api()` is called for the template *and* every instance; a plugin's `register_script_bindings` therefore runs once per entity.
+- **Register host APIs per VM.** `register_host_api()` is called for the template *and* every instance, so every VM exposes the complete `groot.*` surface.
 
 ### Documentation map
 
@@ -198,9 +192,8 @@ groot.RectsOverlap(...), groot.CirclesOverlap(...), groot.CircleHitsRect(...)
 3. **Per-entity data?** Use `CURRENT_ENTITY` / `CURRENT_STATE` thread-local scratch.
 4. **Cross-system command?** Use `static Mutex` queues.
 5. **New visual?** Define a `.prefab.ron` file; don't hardcode in Rust.
-6. **New plugin?** Create a crate depending on `groot-plugin-api`, implement `GrootPlugin`.
-7. **Run `cargo check`** — zero errors required.
-8. **Test** with a `.gos` script and verify runtime behavior.
+6. **Run `cargo check`** — zero errors required.
+7. **Test** with a `.gos` script and verify runtime behavior.
 
 ---
 

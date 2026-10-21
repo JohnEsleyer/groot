@@ -11,7 +11,6 @@ use hecs::World;
 use crate::assets::ron_loader::{PrefabConfig, ShapeConfig, VisualConfig};
 use crate::ecs::*;
 use crate::groot_module::GrootModuleExt;
-use crate::plugin::PluginManager;
 use crate::script::input::InputState;
 
 #[derive(Debug, Clone, Default)]
@@ -87,7 +86,6 @@ pub struct LoadedScript {
 pub struct GrootScriptHost {
     scripts: HashMap<String, LoadedScript>,
     pub input: Rc<InputState>,
-    pub plugin_mgr: PluginManager,
 }
 
 impl GrootScriptHost {
@@ -95,13 +93,11 @@ impl GrootScriptHost {
         Self {
             scripts: HashMap::new(),
             input: Rc::new(InputState::new()),
-            plugin_mgr: PluginManager::new(),
         }
     }
 
     pub fn ensure_engine(&mut self, script_path: &str) -> &mut LoadedScript {
         let input_ref = Rc::clone(&self.input);
-        let plugin_mgr_ref = &self.plugin_mgr;
 
         self.scripts
             .entry(script_path.to_string())
@@ -127,7 +123,7 @@ impl GrootScriptHost {
                     }
                 };
 
-                register_host_api(&mut engine.vm, &input_ref, plugin_mgr_ref);
+                register_host_api(&mut engine.vm, &input_ref);
 
                 // In debug mode, trigger the initial file-based compile.
                 #[cfg(all(debug_assertions, not(target_os = "android")))]
@@ -163,7 +159,7 @@ impl GrootScriptHost {
 
         if !loaded.instances.contains_key(&entity_id) {
             let mut vm = VirtualMachine::new();
-            register_host_api(&mut vm, &self.input, &self.plugin_mgr);
+            register_host_api(&mut vm, &self.input);
             // Seed the instance with the script's globals. Mutable values are
             // deep-copied, so `var self = PipeController{...}` becomes one
             // private struct per entity instead of one shared struct.
@@ -244,12 +240,11 @@ fn sync_instances(loaded: &mut LoadedScript) {
     }
 }
 
-/// Registers the whole `groot.*` scripting API (plus the plugin bindings) on a
-/// VM. Every VM that runs a script — the compiled template as well as each
-/// per-entity instance — needs the full API surface.
-fn register_host_api(vm: &mut VirtualMachine, input: &Rc<InputState>, plugin_mgr: &PluginManager) {
+/// Registers the whole `groot.*` scripting API on a VM. Every VM that runs a
+/// script — the compiled template as well as each per-entity instance — needs
+/// the full API surface.
+fn register_host_api(vm: &mut VirtualMachine, input: &Rc<InputState>) {
     vm.register_groot_module();
-    plugin_mgr.register_all_script_bindings(vm);
 
     let inp_axis = Rc::clone(input);
     vm.register_fn("groot.GetAxis", move |args| {
@@ -530,7 +525,6 @@ pub fn sync_camera_commands(cam_3d: &mut crate::render::Camera3D, cam_2d: &mut c
 
 pub fn update_scripts(host: &mut GrootScriptHost, world: &mut World, dt: f64) {
     host.reload_all();
-    host.plugin_mgr.update_all(world, dt);
 
     ENTITY_POSITIONS.with(|snapshot| {
         let mut map = snapshot.borrow_mut();
