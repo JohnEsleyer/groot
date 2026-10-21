@@ -44,6 +44,23 @@ Groot is a data-driven hybrid 2D/3D engine:
 - **`static Mutex` only for cross-system queues:** `SPAWN_REQUESTS`, `SCRIPT_EVENTS`.
 - **Visuals are RON data.** To change how something looks, edit a `.prefab.ron` file.
 - **Plugins depend on `groot-plugin-api`, NOT on `groot` directly.** This avoids cyclic dependencies.
+- **One VM instance per entity.** `LoadedScript` owns the compiled template *and* one `VirtualMachine` per entity (`instances`). Entity script state must never be shared — seed instances with `Value::deep_clone()` of the template's globals, and hot-swap functions only. See [`../architecture/04-script-runtime.md`](../architecture/04-script-runtime.md).
+- **Register host APIs per VM.** `register_host_api()` is called for the template *and* every instance; a plugin's `register_script_bindings` therefore runs once per entity.
+
+### Documentation map
+
+| Topic | Document |
+| --- | --- |
+| Language overview | [`../language/01-overview.md`](../language/01-overview.md) |
+| Syntax reference | [`../language/02-syntax-reference.md`](../language/02-syntax-reference.md) |
+| Values & collections | [`../language/03-values-and-collections.md`](../language/03-values-and-collections.md) |
+| Standard library | [`../language/04-standard-library.md`](../language/04-standard-library.md) |
+| `groot.*` host API | [`../language/05-groot-host-api.md`](../language/05-groot-host-api.md) |
+| Compiler pipeline | [`../architecture/01-compiler-pipeline.md`](../architecture/01-compiler-pipeline.md) |
+| Bytecode & VM | [`../architecture/02-bytecode-vm.md`](../architecture/02-bytecode-vm.md) |
+| Hot reload | [`../architecture/03-hot-reload.md`](../architecture/03-hot-reload.md) |
+| Script runtime | [`../architecture/04-script-runtime.md`](../architecture/04-script-runtime.md) |
+| Engine overview | [`../architecture/05-engine-overview.md`](../architecture/05-engine-overview.md) |
 
 ---
 
