@@ -12,3 +12,6 @@
 
 textify.yaml
 codebase.txt
+
+# WebAssembly
+*.wasm

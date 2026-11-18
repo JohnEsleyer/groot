@@ -17,6 +17,6 @@ Demonstrates how to decouple gameplay coordinates from screen pixel coordinates 
 
 ```bash
 # From _groot directory:
-../bin/ube build examples/05_camera_and_coords/main.ube --target=wasi2 -o camera.wasm
+ube build examples/05_camera_and_coords/main.ube --target=wasi2 -o camera.wasm
 cargo run --manifest-path host/Cargo.toml -- camera.wasm
 ```

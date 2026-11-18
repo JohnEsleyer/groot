@@ -20,6 +20,6 @@ This benchmark stresses the 2D quad batching pipeline by spawning and updating 1
 
 ```bash
 # From _groot directory:
-../bin/ube build examples/01_bunnymark/main.ube --target=wasi2 -o bunnymark.wasm
+ube build examples/01_bunnymark/main.ube --target=wasi2 -o bunnymark.wasm
 cargo run --manifest-path host/Cargo.toml -- bunnymark.wasm
 ```
