@@ -42,6 +42,36 @@ while game.is_running {
 
 ---
 
+## How to Run Examples
+
+All examples are located under `examples/` and can be checked, compiled to WASI 0.2 components, and run with the host runner:
+
+```bash
+cd _groot
+
+# 1. Type-check any example
+../bin/ube check examples/01_bunnymark/main.ube
+
+# 2. Compile to a WASI 0.2 WebAssembly Component (.wasm)
+../bin/ube build examples/01_bunnymark/main.ube --target=wasi2 -o bunnymark.wasm
+
+# 3. Run with the native host runner
+cargo run --manifest-path host/Cargo.toml -- bunnymark.wasm
+```
+
+### Quick Run Matrix
+
+| Example | Build Command | Run Command |
+| :--- | :--- | :--- |
+| **01 Bunnymark** | `../bin/ube build examples/01_bunnymark/main.ube --target=wasi2 -o bunnymark.wasm` | `cargo run --manifest-path host/Cargo.toml -- bunnymark.wasm` |
+| **02 Platformer** | `../bin/ube build examples/02_platformer/main.ube --target=wasi2 -o platformer.wasm` | `cargo run --manifest-path host/Cargo.toml -- platformer.wasm` |
+| **03 Physics Sandbox** | `../bin/ube build examples/03_physics_sandbox/main.ube --target=wasi2 -o physics.wasm` | `cargo run --manifest-path host/Cargo.toml -- physics.wasm` |
+| **04 Generational ECS** | `../bin/ube build examples/04_generational_ecs/main.ube --target=wasi2 -o ecs.wasm` | `cargo run --manifest-path host/Cargo.toml -- ecs.wasm` |
+| **05 Camera & Coords** | `../bin/ube build examples/05_camera_and_coords/main.ube --target=wasi2 -o camera.wasm` | `cargo run --manifest-path host/Cargo.toml -- camera.wasm` |
+| **Flappy Groot** | `../bin/ube build examples/flappy_groot/main.ube --target=wasi2 -o flappy.wasm` | `cargo run --manifest-path host/Cargo.toml -- flappy.wasm` |
+
+---
+
 ## Directory Layout
 
 ```
@@ -77,33 +107,9 @@ _groot/
 │   └── flappy_groot/          # Full Flappy Bird game sample
 ├── docs/                      # Comprehensive engine documentation
 │   ├── architecture/          # System design, Zero-GC, Host ABI
-│   └── guides/                # Getting started, 2D batching, ECS, physics
+│   └── guides/                # Getting started, running examples, 2D batching, ECS
 ├── llm.txt                    # Consolidated reference for LLM coding agents
 └── legacy/                    # Previous GoScript engine (historical reference)
-```
-
----
-
-## Build & Run
-
-### 1. Verify and Type-check
-Check syntax and affine safety across any example:
-
-```bash
-cd _groot
-../bin/ube check examples/01_bunnymark/main.ube
-```
-
-### 2. Compile to WebAssembly Component (`wasi2`)
-
-```bash
-../bin/ube build examples/01_bunnymark/main.ube --target=wasi2 -o bunnymark.wasm
-```
-
-### 3. Run Native Host
-
-```bash
-cargo run --release --bin groot-host -- bunnymark.wasm
 ```
 
 ---
@@ -111,5 +117,6 @@ cargo run --release --bin groot-host -- bunnymark.wasm
 ## Learning Groot
 
 - Read [`docs/README.md`](docs/README.md) for full tutorials and guides.
+- Read [`docs/guides/01-getting-started.md`](docs/guides/01-getting-started.md) for detailed compilation flags and runner configuration.
 - Read [`llm.txt`](llm.txt) for an LLM-optimized single-document reference.
 - Explore each folder under [`examples/`](examples/) with dedicated README guides explaining core game development principles.

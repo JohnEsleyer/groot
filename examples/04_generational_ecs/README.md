@@ -13,3 +13,13 @@ Demonstrates safe entity lifecycles, slot reuse, and stale reference prevention 
    - Any stale handle referencing the previous entity safely fails lookups (`world.get(h)` returns `none`), eliminating use-after-free bugs.
 3. **Contiguous Cache Coherency**:
    - Entities reside in pre-allocated arrays, avoiding fragmentation and heap allocations during runtime spawns.
+
+---
+
+## How to Run
+
+```bash
+# From _groot directory:
+../bin/ube build examples/04_generational_ecs/main.ube --target=wasi2 -o ecs.wasm
+cargo run --manifest-path host/Cargo.toml -- ecs.wasm
+```

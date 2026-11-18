@@ -12,3 +12,13 @@ A classic side-view platformer physics model incorporating gravity, horizontal a
    - Constant delta-time step (`dt = 0.016`) guarantees repeatable jumps and floor landings.
 3. **Decoupled Input Feed (`InputManager`)**:
    - Inputs are buffered and queried via `is_key_pressed` or `is_key_down` without depending on platform window handles.
+
+---
+
+## How to Run
+
+```bash
+# From _groot directory:
+../bin/ube build examples/02_platformer/main.ube --target=wasi2 -o platformer.wasm
+cargo run --manifest-path host/Cargo.toml -- platformer.wasm
+```

@@ -12,3 +12,13 @@ A full port of the legacy Flappy Bird sample into pure, native Ube WebAssembly.
    - Pipes spawn dynamically and recycle automatically without creating heap garbage.
 3. **Regional Frame Scratch**:
    - Frame rendering runs within `arena { ... }`, maintaining a 0-byte persistent memory delta between game ticks.
+
+---
+
+## How to Run
+
+```bash
+# From _groot directory:
+../bin/ube build examples/flappy_groot/main.ube --target=wasi2 -o flappy.wasm
+cargo run --manifest-path host/Cargo.toml -- flappy.wasm
+```

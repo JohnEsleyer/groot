@@ -13,3 +13,13 @@ This benchmark stresses the 2D quad batching pipeline by spawning and updating 1
    - When the frame finishes, all transient memory resets via bump-pointer pointer rollback in a single machine cycle.
 3. **Batched Geometry Submission**:
    - Quads are formatted into interleaved 8-float vertices (`x, y, u, v, r, g, b, a`) and flushed directly to the host GPU via `submit()` and `present()`.
+
+---
+
+## How to Run
+
+```bash
+# From _groot directory:
+../bin/ube build examples/01_bunnymark/main.ube --target=wasi2 -o bunnymark.wasm
+cargo run --manifest-path host/Cargo.toml -- bunnymark.wasm
+```
