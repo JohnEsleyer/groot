@@ -29,7 +29,7 @@ pub fn app_new(cfg: EngineConfig) -> App {
         config:     move cfg,
         batcher:    render::batcher_new(2048),
         camera:     render::camera_new(w, h),
-        input:      input::input_new(),
+        input:      input::manager_new(),
         time:       time::time_new(),
         clear:      color::clear(),
         is_running: true
@@ -37,7 +37,7 @@ pub fn app_new(cfg: EngineConfig) -> App {
 }
 
 pub fn (mut app App) start() {
-    platform::open_window_sized(app.config.width, app.config.height, app.config.title)
+    platform::open_window(app.config.width, app.config.height, app.config.title)
     platform::setup(app.config.width, app.config.height)
 }
 

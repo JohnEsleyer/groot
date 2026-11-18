@@ -1,0 +1,45 @@
+package main
+
+// 05 — Camera and Coordinates: World-to-screen transforms, pan, and zoom
+
+import "../../pkgs/groot/app" as app
+import "../../pkgs/groot/render" as render
+import "../../pkgs/groot/math" as math
+import "../../pkgs/groot/color" as color
+
+fn main() {
+    let mut game = app::app_new(app::EngineConfig{
+        width: 800,
+        height: 600,
+        title: "Groot — Camera and Coordinate Transforms"
+    })
+    game.start()
+
+    let mut cam = render::camera_new(800.0, 600.0)
+    let target_world_pos = math::vec2(100.0, 50.0)
+
+    let mut frame = 0
+    while game.is_running && frame < 120 {
+        // Camera pans and zooms smoothly
+        cam.position.x += 1.0
+        cam.zoom = 1.0 + (frame as f32) * 0.005
+
+        // Transform world coordinate into screen coordinates
+        let screen_pos = cam.world_to_screen(target_world_pos)
+
+        arena {
+            game.begin_frame()
+
+            // Draw target object at projected screen position
+            let box_size = 40.0 * cam.zoom
+            game.draw_rect(screen_pos.x, screen_pos.y, box_size, box_size, color::yellow())
+
+            // Draw center marker
+            game.draw_rect(395.0, 295.0, 10.0, 10.0, color::red())
+
+            game.present()
+        }
+
+        frame += 1
+    }
+}

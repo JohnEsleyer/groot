@@ -1,0 +1,62 @@
+package main
+
+// 04 — Generational ECS: Demonstrating zero-GC entity lifecycles using Pool[Entity]
+
+import "../../pkgs/groot/app" as app
+import "../../pkgs/groot/ecs" as ecs
+import "../../pkgs/groot/math" as math
+import "../../pkgs/groot/color" as color
+
+fn main() {
+    let mut game = app::app_new(app::EngineConfig{
+        width: 800,
+        height: 600,
+        title: "Groot — Generational ECS Example"
+    })
+    game.start()
+
+    let mut world = ecs::world_new(128)
+
+    // Spawn 5 initial sprite entities
+    let mut h1 = world.create_sprite_rgba(100.0, 150.0, 32.0, 32.0, 0.9, 0.2, 0.2, 1.0)
+    let mut h2 = world.create_sprite_rgba(200.0, 150.0, 32.0, 32.0, 0.2, 0.8, 0.3, 1.0)
+    let mut h3 = world.create_sprite_rgba(300.0, 150.0, 32.0, 32.0, 0.2, 0.4, 0.9, 1.0)
+
+    let mut frame = 0
+    while game.is_running && frame < 120 {
+        // Despawn h2 at frame 40; slot becomes recyclable with incremented generation
+        if frame == 40 {
+            world.despawn(h2)
+        }
+
+        // Spawn replacement at frame 60; reuses slot with new generational handle
+        if frame == 60 {
+            h2 = world.create_sprite_rgba(200.0, 250.0, 48.0, 48.0, 1.0, 0.9, 0.2, 1.0)
+        }
+
+        arena {
+            game.begin_frame()
+
+            // Draw active entities
+            if let e1 = world.get(h1) {
+                if let s = e1.sprite {
+                    game.draw_rect(e1.transform.position.x, e1.transform.position.y, s.size.x, s.size.y, s.color)
+                }
+            }
+            if let e2 = world.get(h2) {
+                if let s = e2.sprite {
+                    game.draw_rect(e2.transform.position.x, e2.transform.position.y, s.size.x, s.size.y, s.color)
+                }
+            }
+            if let e3 = world.get(h3) {
+                if let s = e3.sprite {
+                    game.draw_rect(e3.transform.position.x, e3.transform.position.y, s.size.x, s.size.y, s.color)
+                }
+            }
+
+            game.present()
+        }
+
+        frame += 1
+    }
+}

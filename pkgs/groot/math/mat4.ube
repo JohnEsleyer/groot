@@ -1,4 +1,4 @@
-package groot
+package math
 
 pub struct Mat4 {
     pub m: [16]f32

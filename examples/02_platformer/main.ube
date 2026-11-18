@@ -28,7 +28,7 @@ fn main() {
         vy: 0.0,
         grounded: false
     }
-    let mut controls = input::input_new()
+    let mut controls = input::manager_new()
 
     let ground_y = 500.0
     let obstacle_x = 350.0

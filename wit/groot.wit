@@ -1,39 +1,17 @@
-package groot:engine@0.2.0;
+package ube:graphics@0.2.0;
 
 interface window {
-    record config {
-        width: u32,
-        height: u32,
-        title: string,
-        vsync: bool,
-    }
-
-    open: func(cfg: config);
-    get-size: func() -> tuple<u32, u32>;
-}
-
-interface input {
-    record event {
-        kind: u32,       // 0: KeyDown, 1: KeyUp, 2: MouseMove, 3: MouseDown, 4: MouseUp
-        code: u32,
-        x: f32,
-        y: f32,
-    }
-
-    poll-events: func() -> list<event>;
+    create-window: func(width: u32, height: u32, title: string);
 }
 
 interface gpu {
     setup: func(width: u32, height: u32);
-    set-clear-color: func(r: f64, g: f64, b: f64, a: f64);
-    submit-vertices: func(vertices: list<f32>);
+    set-vertices: func(data: list<f32>);
     draw-frame: func(r: f64, g: f64, b: f64);
 }
 
-world groot-app {
+world groot-runner {
     import window;
-    import input;
     import gpu;
-
-    export wasi:cli/run@0.2.0;
+    include wasi:cli/command@0.2.0;
 }

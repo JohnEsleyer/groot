@@ -1,4 +1,4 @@
-package groot
+package math
 
 pub struct Vec3 {
     pub x: f32,

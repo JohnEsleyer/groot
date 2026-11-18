@@ -1,6 +1,8 @@
 package main
 
-import "../../pkgs/groot" as groot
+import "../../pkgs/groot/app" as app
+import "../../pkgs/groot/color" as color
+import "../../pkgs/groot/platform" as platform
 
 struct Bunny {
     x: f32,
@@ -10,30 +12,32 @@ struct Bunny {
 }
 
 fn main() {
-    let mut cfg = groot::default_config()
-    cfg.title = "Groot Engine - Bunnymark Benchmark"
-    let mut app = groot::app_new(cfg)
+    let mut game = app::app_new(app::EngineConfig{
+        width: 1280,
+        height: 720,
+        title: "Groot Engine - Bunnymark Benchmark"
+    })
+    game.start()
 
     let mut bunnies = []Bunny{}
     let mut i = 0
     while i < 1000 {
+        let mod_x = i % 10
+        let mod_y = i % 7
         bunnies.push(Bunny{
             x: 640.0,
             y: 360.0,
-            vx: (i % 10) as f32 * 20.0 - 100.0,
-            vy: (i % 7) as f32 * 20.0 - 70.0
+            vx: (mod_x as f32) * 20.0 - 100.0,
+            vy: (mod_y as f32) * 20.0 - 70.0
         })
         i += 1
     }
 
     let gravity: f32 = 980.0
     let dt: f32 = 0.016666
+    let mut frame = 0
 
-    // Frame arena loop: all intermediate frame maths and transient allocations
-    // are automatically wiped at the end of each iteration in 1 instruction.
-    arena while app.running {
-        app.batcher.clear()
-
+    while game.is_running && frame < 300 {
         let mut b_idx = 0
         while b_idx < bunnies.len {
             bunnies[b_idx].x += bunnies[b_idx].vx * dt
@@ -47,20 +51,26 @@ fn main() {
                 bunnies[b_idx].y = 720.0
                 bunnies[b_idx].vy = -bunnies[b_idx].vy * 0.85
             }
-
-            app.batcher.draw_quad(
-                bunnies[b_idx].x,
-                bunnies[b_idx].y,
-                16.0,
-                16.0,
-                groot::color_green()
-            )
             b_idx += 1
         }
 
-        if app.batcher.vertices.len > 0 {
-            groot::host_gpu_submit_vertices(app.batcher.vertices.ptr, app.batcher.vertices.len)
+        // Transient frame rendering inside regional scratch arena
+        arena {
+            game.begin_frame()
+            let mut draw_idx = 0
+            while draw_idx < bunnies.len {
+                game.draw_rect(
+                    bunnies[draw_idx].x,
+                    bunnies[draw_idx].y,
+                    16.0,
+                    16.0,
+                    color::green()
+                )
+                draw_idx += 1
+            }
+            game.present()
         }
-        groot::host_gpu_draw(0.05, 0.05, 0.08)
+
+        frame += 1
     }
 }

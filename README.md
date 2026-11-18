@@ -1,13 +1,12 @@
 # Groot Engine (Ube Edition)
 
-**Groot** is a zero-GC 2D/3D game engine written directly in **Ube**, targeting
-the **WASI 0.2 Component Model** and backed by a thin native Rust host
-(`winit` + `wgpu` + `wasmtime`).
+**Groot** is a zero-GC 2D/3D game engine written directly in **Ube**, targeting the **WASI 0.2 Component Model** and backed by a high-throughput native Rust host (`winit` + `wgpu` + `wasmtime`).
 
-The previous GoScript-based engine is preserved under `legacy/` (and on the
-`legacy-goscript` git branch) for reference.
+The previous GoScript-based engine is preserved under `legacy/` (and on the `legacy-goscript` git branch) for reference.
 
-## Architecture
+---
+
+## Architecture Overview
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
@@ -27,23 +26,23 @@ The previous GoScript-based engine is preserved under `legacy/` (and on the
 └───────────────────────────────────────────────────────────────┘
 ```
 
-### Zero-GC frame memory
+### Zero-GC Frame Memory
 
-Persistent simulation state uses flat value data (fixed arrays, structs,
-`Pool[T]`). Transient frame data is allocated in `arena while` / `arena for`
-iterations and reclaimed in one bump-pointer reset:
+Persistent simulation state uses flat value data (fixed arrays, structs, `Pool[T]`). Transient frame data is allocated in regional bump arenas (`arena { ... }`) and reclaimed in one bump-pointer reset:
 
 ```ube
-arena while frame < 300 {
-    let mut batch = render::batcher_new(10000)
-    // ... update simulation, append vertices ...
-    platform::submit(batch.vertices)
-    platform::present(0.06, 0.06, 0.09)
-    frame += 1
+while game.is_running {
+    arena {
+        game.begin_frame()
+        game.draw_rect(player.x, player.y, 32.0, 32.0, color::green())
+        game.present()
+    } // Transient scratch memory wiped in 1 machine cycle
 }
 ```
 
-## Layout
+---
+
+## Directory Layout
 
 ```
 _groot/
@@ -58,77 +57,59 @@ _groot/
 │       ├── window.rs          # winit window manager
 │       ├── gpu.rs             # wgpu sprite pipeline / vertex batches
 │       └── input.rs           # raw host input queue
-├── pkgs/groot/
-│   ├── math/                  # Vec2, Vec3, Rect, Mat4, Transform
+├── pkgs/groot/                # Core Ube Engine Packages
+│   ├── app/                   # Game lifecycle and engine harness
+│   ├── math/                  # Vec2, Vec3, Mat4, Rect, Transform
 │   ├── color/                 # RGBA colors
-│   ├── render/                # Camera2D, SpriteBatcher
-│   ├── input/                 # typed key/mouse state
-│   ├── ecs/                   # Pool[Entity] world
-│   ├── physics2d/             # AABB manifolds, raycasts
-│   ├── assets/                # texture-atlas regions
-│   ├── time/                  # frame timing
-│   ├── app/                   # lifecycle harness
-│   ├── platform/              # guest bridge to ube:graphics imports
-│   └── groot.ube              # versioned engine entry point
-├── examples/
-│   ├── 01_bunnymark/
-│   ├── 02_platformer/
-│   └── 03_physics_sandbox/
-└── legacy/                    # previous GoScript engine (reference)
+│   ├── render/                # Camera2D, SpriteBatcher (8-float vertex layout)
+│   ├── input/                 # Typed key/mouse state and InputManager
+│   ├── ecs/                   # Pool[Entity] world with generational handles
+│   ├── physics2d/             # AABB manifolds, raycasts, MTV resolution
+│   ├── assets/                # Texture-atlas regions and slicing
+│   ├── time/                  # Delta timing and FPS tracking
+│   └── platform/              # Guest bridge to ube:graphics WASI imports
+├── examples/                  # Fully working, documented examples
+│   ├── 01_bunnymark/          # 1,000 bouncing entities stress test
+│   ├── 02_platformer/         # Gravity, jump physics, and AABB collision
+│   ├── 03_physics_sandbox/    # Multi-body momentum & impulse resolution
+│   ├── 04_generational_ecs/   # Generational handle safety with Pool[Entity]
+│   ├── 05_camera_and_coords/  # World-to-screen transforms, pan, and zoom
+│   └── flappy_groot/          # Full Flappy Bird game sample
+├── docs/                      # Comprehensive engine documentation
+│   ├── architecture/          # System design, Zero-GC, Host ABI
+│   └── guides/                # Getting started, 2D batching, ECS, physics
+├── llm.txt                    # Consolidated reference for LLM coding agents
+└── legacy/                    # Previous GoScript engine (historical reference)
 ```
+
+---
 
 ## Build & Run
 
-Build an example as a WASI 0.2 component:
+### 1. Verify and Type-check
+Check syntax and affine safety across any example:
 
 ```bash
 cd _groot
-../bin/ube build examples/01_bunnymark --target=wasi2 -o bunnymark.wasm
+../bin/ube check examples/01_bunnymark/main.ube
 ```
 
-Run it through the native host:
+### 2. Compile to WebAssembly Component (`wasi2`)
+
+```bash
+../bin/ube build examples/01_bunnymark/main.ube --target=wasi2 -o bunnymark.wasm
+```
+
+### 3. Run Native Host
 
 ```bash
 cargo run --release --bin groot-host -- bunnymark.wasm
 ```
 
-The host creates the window when the guest calls `platform::open_window`,
-uploads the last sprite batch, presents it, and keeps the window alive until it
-is closed.
+---
 
-## Host ABI
+## Learning Groot
 
-Ube's `--target=wasi2` backend packages `extern` imports into component
-interfaces. Groot uses the shipped `ube:graphics` contracts:
-
-```wit
-interface window {
-    create-window: func(width: u32, height: u32, title: string);
-}
-
-interface gpu {
-    setup: func(width: u32, height: u32);
-    set-vertices: func(data: list<f32>);
-    draw-frame: func(r: f64, g: f64, b: f64);
-}
-```
-
-A vertex is eight `f32` values: `[x, y, u, v, r, g, b, a]`. Six vertices make
-one quad; the host converts pixel coordinates (top-left origin) to clip space
-in the vertex shader.
-
-## Implementation Notes
-
-- All engine math is native Ube. `sqrt` is implemented with Newton-Raphson
-  because the compiler currently type-checks but does not lower the `sqrt`
-  builtin on the wasm2 backend.
-- Imports use the declared package names (`math::`, `color::`, …) rather than
-  short aliases. The type checker canonicalizes imported type names by package
-  name, so aliases break cross-package field access.
-- `Pool[T]` returns value snapshots. `World.replace` demonstrates the
-  copy-on-replace pattern; gameplay code that mutates every frame should store
-  hot state in flat fixed arrays.
-- `host/src/input.rs` captures keyboard/mouse events. Wiring them to the guest
-  requires an `input` component interface in the Ube wasi2 backend; the Ube
-  `InputManager` already accepts the same event kinds, so only the host ABI
-  bridge remains.
+- Read [`docs/README.md`](docs/README.md) for full tutorials and guides.
+- Read [`llm.txt`](llm.txt) for an LLM-optimized single-document reference.
+- Explore each folder under [`examples/`](examples/) with dedicated README guides explaining core game development principles.

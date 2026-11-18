@@ -1,0 +1,117 @@
+package main
+
+import "../../pkgs/groot/app" as app
+import "../../pkgs/groot/color" as color
+import "../../pkgs/groot/math" as math
+
+struct Pipe {
+    x: f32,
+    gap_y: f32,
+    gap_size: f32,
+    width: f32,
+    passed: bool
+}
+
+struct Bird {
+    y: f32,
+    vy: f32,
+    gravity: f32,
+    jump_force: f32,
+    size: f32
+}
+
+struct GameState {
+    bird: Bird,
+    pipes: Pool[Pipe],
+    score: i32,
+    high_score: i32,
+    is_game_over: bool,
+    spawn_timer: f32
+}
+
+fn game_reset() -> GameState {
+    let mut pipe_pool = Pool[Pipe].new(32)
+    return GameState{
+        bird: Bird{
+            y: 300.0,
+            vy: 0.0,
+            gravity: 900.0,
+            jump_force: -320.0,
+            size: 24.0
+        },
+        pipes: move pipe_pool,
+        score: 0,
+        high_score: 0,
+        is_game_over: false,
+        spawn_timer: 0.0
+    }
+}
+
+fn (mut state GameState) update(dt: f32) {
+    if state.is_game_over {
+        return
+    }
+
+    // 1. Update bird physics
+    state.bird.vy += state.bird.gravity * dt
+    state.bird.y += state.bird.vy * dt
+
+    // Floor and ceiling collisions
+    if state.bird.y < 0.0 {
+        state.bird.y = 0.0
+        state.bird.vy = 0.0
+    }
+    if state.bird.y > 560.0 {
+        state.is_game_over = true
+    }
+
+    // 2. Spawn pipes
+    state.spawn_timer += dt
+    if state.spawn_timer > 1.8 {
+        state.spawn_timer = 0.0
+        state.pipes.spawn(Pipe{
+            x: 820.0,
+            gap_y: 200.0,
+            gap_size: 150.0,
+            width: 50.0,
+            passed: false
+        })
+    }
+}
+
+fn main() {
+    let mut game_app = app::app_new(app::EngineConfig{
+        width: 800,
+        height: 600,
+        title: "Groot - Flappy Ube"
+    })
+    game_app.start()
+
+    let mut game = game_reset()
+    let dt: f32 = 0.016667
+    let mut frame = 0
+
+    while game_app.is_running && frame < 180 {
+        game.update(dt)
+
+        arena {
+            game_app.begin_frame()
+
+            // Draw ground
+            game_app.draw_rect(0.0, 560.0, 800.0, 40.0, color::green())
+
+            // Draw bird
+            game_app.draw_rect(
+                100.0,
+                game.bird.y,
+                game.bird.size,
+                game.bird.size,
+                color::yellow()
+            )
+
+            game_app.present()
+        }
+
+        frame += 1
+    }
+}

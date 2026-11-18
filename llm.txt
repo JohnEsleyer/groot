@@ -1,0 +1,125 @@
+# Groot Engine (Ube Edition) — LLM Knowledge Base & Complete API Reference
+
+Groot is a zero-GC 2D/3D game engine compiled from Ube into WASI 0.2 WebAssembly components, executed by a high-throughput native host (winit + wgpu + wasmtime).
+
+---
+
+## 1. Core Architecture Principles
+
+1. **Guest-Host Division**:
+   - Guest (Ube): Game logic, scene graph, ECS, physics, batch generation, and camera transforms.
+   - Host (Rust): Surface creation (`winit`), GPU pipelines & draw calls (`wgpu`), frame timing.
+2. **Zero Garbage Collection**:
+   - Persistent simulation state: Flat value structs and pre-allocated `Pool[T]`.
+   - Frame scratch memory: Bump arenas (`arena { ... }`) that reset instantly without GC pauses.
+3. **No Hidden Heap Allocations**:
+   - Math types (`Vec2`, `Vec3`, `Mat4`, `Rect`, `Transform`) and `Color` are value types passed directly by value or view.
+
+---
+
+## 2. Standard Packages in `pkgs/groot/`
+
+### `pkgs/groot/app`
+- `EngineConfig`: Struct with `width: i32`, `height: i32`, `title: string`.
+- `app_new(cfg: EngineConfig) -> App`: Constructs the engine application harness.
+- `(mut app App) start()`: Initializes the window and GPU surface on the host.
+- `(mut app App) begin_frame()`: Clears the sprite batcher and prepares input.
+- `(mut app App) draw_rect(x: f32, y: f32, w: f32, h: f32, c: Color)`: Batches a colored rectangle.
+- `(mut app App) present()`: Submits vertex buffer and issues host frame presentation.
+- `(mut app App) stop()`: Sets `is_running = false`.
+
+### `pkgs/groot/render`
+- `SpriteBatcher`: Accumulates 8-float quad vertices `[x, y, u, v, r, g, b, a]`.
+- `batcher_new(quad_capacity: i32) -> SpriteBatcher`
+- `(mut b SpriteBatcher) clear()`
+- `(mut b SpriteBatcher) draw_rect(x: f32, y: f32, w: f32, h: f32, c: Color)`
+- `(mut b SpriteBatcher) draw_quad(x, y, w, h, u0, v0, u1, v1, color)`
+- `Camera2D`: Manages 2D viewport, pan, and zoom.
+- `camera_new(width: f32, height: f32) -> Camera2D`
+- `(c Camera2D) world_to_screen(world_pos: Vec2) -> Vec2`
+- `(c Camera2D) screen_to_world(screen_pos: Vec2) -> Vec2`
+
+### `pkgs/groot/ecs`
+- `World`: Container of `Pool[Entity]`.
+- `world_new(capacity: i32) -> World`
+- `(mut w World) create_sprite_rgba(x: f32, y: f32, sx: f32, sy: f32, r: f32, g: f32, b: f32, a: f32) -> UbeHandle`
+- `(w World) get(handle: UbeHandle) -> Entity?`
+- `(w World) is_alive(handle: UbeHandle) -> bool`
+- `(mut w World) despawn(handle: UbeHandle)`
+
+### `pkgs/groot/physics2d`
+- `check_aabb_xy(x1, y1, w1, h1, x2, y2, w2, h2) -> CollisionManifold`
+- `CollisionManifold`: Contains `has_collision: bool`, `normal: Vec2`, `depth: f32`.
+- `overlaps(r1: Rect, r2: Rect) -> bool`
+
+### `pkgs/groot/math`
+- `Vec2{ x: f32, y: f32 }`, `vec2(x, y) -> Vec2`, `vec2_zero()`, `vec2_one()`
+- Methods on `Vec2`: `add(other)`, `sub(other)`, `scale(s)`, `dot(other)`, `len()`, `normalized()`, `distance_to(other)`
+- `Rect{ x: f32, y: f32, w: f32, h: f32 }`, `rect(x, y, w, h)`
+- `Transform{ position: Vec2, rotation: f32, scale: Vec2 }`
+
+### `pkgs/groot/color`
+- `Color{ r: f32, g: f32, b: f32, a: f32 }`
+- `rgba(r, g, b, a)`, `rgb(r, g, b)`, `white()`, `black()`, `red()`, `green()`, `blue()`, `yellow()`, `clear()`, `lerp(a, b, t)`
+
+### `pkgs/groot/input`
+- `InputManager`: Buffers events.
+- `manager_new() -> InputManager`
+- `(view m InputManager) is_key_down(code: i32) -> bool`
+- `(view m InputManager) is_key_pressed(code: i32) -> bool`
+- Key helpers: `key_space()`, `key_enter()`, `key_escape()`, `key_left()`, `key_right()`, `key_up()`, `key_down()`
+
+### `pkgs/groot/platform`
+- `open_window(width: i32, height: i32, title: string)`
+- `setup(width: i32, height: i32)`
+- `submit(vertices: []f32)`
+- `present(r: f64, g: f64, b: f64)`
+
+---
+
+## 3. Canonical Pattern for Groot Games
+
+```ube
+package main
+
+import "../../pkgs/groot/app" as app
+import "../../pkgs/groot/color" as color
+
+fn main() {
+    let mut game = app::app_new(app::EngineConfig{
+        width: 800,
+        height: 600,
+        title: "Groot Game"
+    })
+    game.start()
+
+    let dt: f32 = 0.016667
+    let mut frame = 0
+
+    while game.is_running && frame < 600 {
+        // 1. Simulation update on persistent state
+
+        // 2. Render pass inside regional scratch arena
+        arena {
+            game.begin_frame()
+            game.draw_rect(100.0, 100.0, 50.0, 50.0, color::green())
+            game.present()
+        }
+
+        frame += 1
+    }
+}
+```
+
+## 4. Build and Run Commands
+
+```bash
+# Check syntax & affine safety
+ube check examples/01_bunnymark/main.ube
+
+# Compile to WASI 0.2 component
+ube build examples/01_bunnymark/main.ube --target=wasi2 -o game.wasm
+
+# Run with Groot Host
+cargo run --release --bin groot-host -- game.wasm
+```

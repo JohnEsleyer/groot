@@ -88,3 +88,37 @@ pub fn (mut b SpriteBatcher) draw_rect_rgba(
     let c = color::rgba(cr, cg, cb, ca)
     b.draw_quad(x, y, w, h, 0.0, 0.0, 1.0, 1.0, move c)
 }
+
+pub struct Camera2D {
+    pub position:        math::Vec2,
+    pub viewport_width:  f32,
+    pub viewport_height: f32,
+    pub zoom:            f32
+}
+
+pub fn camera_new(width: f32, height: f32) -> Camera2D {
+    return Camera2D{
+        position:        math::vec2_zero(),
+        viewport_width:  width,
+        viewport_height: height,
+        zoom:            1.0
+    }
+}
+
+pub fn (c Camera2D) world_to_screen(world_pos: math::Vec2) -> math::Vec2 {
+    let half_w = c.viewport_width * 0.5
+    let half_h = c.viewport_height * 0.5
+    return math::Vec2{
+        x: (world_pos.x - c.position.x) * c.zoom + half_w,
+        y: (world_pos.y - c.position.y) * c.zoom + half_h
+    }
+}
+
+pub fn (c Camera2D) screen_to_world(screen_pos: math::Vec2) -> math::Vec2 {
+    let half_w = c.viewport_width * 0.5
+    let half_h = c.viewport_height * 0.5
+    return math::Vec2{
+        x: (screen_pos.x - half_w) / c.zoom + c.position.x,
+        y: (screen_pos.y - half_h) / c.zoom + c.position.y
+    }
+}
