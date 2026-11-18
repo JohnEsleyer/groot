@@ -1,0 +1,132 @@
+package physics2d
+
+import "../math" as math
+
+pub struct BoxCollider {
+    pub offset: math::Vec2,
+    pub size:   math::Vec2
+}
+
+pub struct CollisionManifold {
+    pub has_collision: bool,
+    pub normal:        math::Vec2,
+    pub depth:         f32
+}
+
+fn absf(v: f32) -> f32 {
+    if v < 0.0 {
+        return -v
+    }
+    return v
+}
+
+fn no_hit() -> CollisionManifold {
+    return CollisionManifold{
+        has_collision: false,
+        normal: math::vec2_zero(),
+        depth: 0.0
+    }
+}
+
+// AABB overlap with minimum-translation-vector normal. Positions are treated as
+// box centers.
+pub fn check_aabb(
+    a_pos: math::Vec2, a_size: math::Vec2,
+    b_pos: math::Vec2, b_size: math::Vec2
+) -> CollisionManifold {
+    let delta = math::vec2(b_pos.x - a_pos.x, b_pos.y - a_pos.y)
+    let half_a = a_size.scale(0.5)
+    let half_b = b_size.scale(0.5)
+
+    let ox = (half_a.x + half_b.x) - absf(delta.x)
+    if ox <= 0.0 {
+        return no_hit()
+    }
+
+    let oy = (half_a.y + half_b.y) - absf(delta.y)
+    if oy <= 0.0 {
+        return no_hit()
+    }
+
+    if ox < oy {
+        let nx = if delta.x < 0.0 { -1.0 } else { 1.0 }
+        return CollisionManifold{
+            has_collision: true,
+            normal: math::vec2(nx, 0.0),
+            depth: ox
+        }
+    }
+
+    let ny = if delta.y < 0.0 { -1.0 } else { 1.0 }
+    return CollisionManifold{
+        has_collision: true,
+        normal: math::vec2(0.0, ny),
+        depth: oy
+    }
+}
+
+pub fn check_aabb_xy(
+    ax: f32, ay: f32, aw: f32, ah: f32,
+    bx: f32, by: f32, bw: f32, bh: f32
+) -> CollisionManifold {
+    return check_aabb(
+        math::vec2(ax, ay), math::vec2(aw, ah),
+        math::vec2(bx, by), math::vec2(bw, bh)
+    )
+}
+
+pub fn overlaps(a: math::Rect, b: math::Rect) -> bool {
+    return a.intersects(b)
+}
+
+// Slab-method ray/AABB test in pixels. Returns the entry distance along the
+// normalized ray, or -1 when there is no hit.
+pub fn raycast_aabb(
+    ox: f32, oy: f32, dx: f32, dy: f32, view box: math::Rect
+) -> f32 {
+    let inv_x = if dx != 0.0 { 1.0 / dx } else { 0.0 }
+    let inv_y = if dy != 0.0 { 1.0 / dy } else { 0.0 }
+
+    let mut t1 = (box.x - ox) * inv_x
+    let mut t2 = (box.x + box.w - ox) * inv_x
+    if t1 > t2 {
+        let tmp = t1
+        t1 = t2
+        t2 = tmp
+    }
+
+    let mut t3 = (box.y - oy) * inv_y
+    let mut t4 = (box.y + box.h - oy) * inv_y
+    if t3 > t4 {
+        let tmp = t3
+        t3 = t4
+        t4 = tmp
+    }
+
+    let tmin = if t1 > t3 { t1 } else { t3 }
+    let tmax = if t2 < t4 { t2 } else { t4 }
+
+    if tmax < 0.0 || tmin > tmax {
+        return -1.0
+    }
+    if tmin < 0.0 {
+        return 0.0
+    }
+    return tmin
+}
+
+// Simple impulse-free separation helper for two dynamic bodies.
+pub fn resolve(
+    mut ax: f32, mut ay: f32,
+    bx: f32, by: f32,
+    aw: f32, ah: f32,
+    bw: f32, bh: f32
+) -> math::Vec2 {
+    let m = check_aabb_xy(ax, ay, aw, ah, bx, by, bw, bh)
+    if !m.has_collision {
+        return math::vec2(ax, ay)
+    }
+    ax += m.normal.x * m.depth
+    ay += m.normal.y * m.depth
+    return math::vec2(ax, ay)
+}

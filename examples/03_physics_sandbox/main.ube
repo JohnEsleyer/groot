@@ -1,0 +1,74 @@
+package main
+
+// 03 — Physics sandbox: bouncing bodies and AABB manifold queries.
+
+import "../../pkgs/groot/render" as render
+import "../../pkgs/groot/physics2d" as physics2d
+import "../../pkgs/groot/platform" as platform
+
+struct Particle {
+    x: f32,
+    y: f32,
+    vx: f32,
+    vy: f32,
+    radius: f32
+}
+
+fn main() {
+    platform::open_window(800, 600, "Groot — Physics Sandbox")
+
+    let mut bodies = []Particle{}
+    bodies.push(Particle{ x: 200.0, y: 100.0, vx: 150.0, vy: 25.0, radius: 8.0 })
+    bodies.push(Particle{ x: 500.0, y: 100.0, vx: -150.0, vy: 40.0, radius: 8.0 })
+
+    let dt = 0.016
+    let mut collisions: i32 = 0
+    let mut step: i32 = 0
+
+    while step < 120 {
+        let mut i: i32 = 0
+        while i < bodies.len {
+            bodies[i].x += bodies[i].vx * dt
+            bodies[i].y += bodies[i].vy * dt
+
+            if bodies[i].x < 20.0 || bodies[i].x > 780.0 {
+                bodies[i].vx = -bodies[i].vx
+            }
+            if bodies[i].y < 20.0 || bodies[i].y > 580.0 {
+                bodies[i].vy = -bodies[i].vy
+            }
+            i += 1
+        }
+
+        let hit = physics2d::check_aabb_xy(
+            bodies[0].x, bodies[0].y, 16.0, 16.0,
+            bodies[1].x, bodies[1].y, 16.0, 16.0
+        )
+        if hit.has_collision {
+            collisions += 1
+            let n = hit.normal
+            let relative = (bodies[1].vx - bodies[0].vx) * n.x +
+                           (bodies[1].vy - bodies[0].vy) * n.y
+            if relative < 0.0 {
+                bodies[0].vx -= relative * n.x
+                bodies[0].vy -= relative * n.y
+                bodies[1].vx += relative * n.x
+                bodies[1].vy += relative * n.y
+            }
+        }
+
+        arena {
+            let mut batch = render::batcher_new(2)
+            batch.draw_rect_rgba(bodies[0].x - 8.0, bodies[0].y - 8.0, 16.0, 16.0, 1.0, 0.8, 0.2, 1.0)
+            batch.draw_rect_rgba(bodies[1].x - 8.0, bodies[1].y - 8.0, 16.0, 16.0, 0.3, 0.8, 1.0, 1.0)
+
+            if step == 119 {
+                platform::submit(batch.vertices)
+                platform::present(0.05, 0.06, 0.1)
+                println(f"Sandbox completed 120 steps with {collisions} reported contacts.")
+            }
+        }
+
+        step += 1
+    }
+}

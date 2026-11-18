@@ -1,0 +1,37 @@
+package assets
+
+pub struct SpriteRegion {
+    pub u0: f32,
+    pub v0: f32,
+    pub u1: f32,
+    pub v1: f32
+}
+
+pub struct TextureAtlas {
+    pub width:  i32,
+    pub height: i32
+}
+
+pub fn atlas_new(w: i32, h: i32) -> TextureAtlas {
+    return TextureAtlas{ width: w, height: h }
+}
+
+pub fn (a TextureAtlas) region(px_x: i32, px_y: i32, px_w: i32, px_h: i32) -> SpriteRegion {
+    let fw = a.width as f32
+    let fh = a.height as f32
+    if fw <= 0.0 || fh <= 0.0 {
+        return SpriteRegion{ u0: 0.0, v0: 0.0, u1: 0.0, v1: 0.0 }
+    }
+    return SpriteRegion{
+        u0: (px_x as f32) / fw,
+        v0: (px_y as f32) / fh,
+        u1: ((px_x + px_w) as f32) / fw,
+        v1: ((px_y + px_h) as f32) / fh
+    }
+}
+
+// Levels and sprite metadata are commonly authored as JSON. The engine keeps
+// this helper tiny so games can choose their own schema.
+pub fn atlas_from_grid(width: i32, height: i32, cell_w: i32, cell_h: i32) -> TextureAtlas {
+    return TextureAtlas{ width: width, height: height }
+}

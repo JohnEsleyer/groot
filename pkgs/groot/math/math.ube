@@ -1,0 +1,228 @@
+package math
+
+// Groot's math core. Everything is a plain value type: no hidden heap
+// allocations, no operator overloading, no GC.
+
+pub struct Vec2 {
+    pub x: f32,
+    pub y: f32
+}
+
+pub fn vec2(x: f32, y: f32) -> Vec2 {
+    return Vec2{ x: x, y: y }
+}
+
+fn sqrt_f32(x: f32) -> f32 {
+    if x <= 0.0 {
+        return 0.0
+    }
+    // Newton-Raphson; deterministic, branch-light and fully in-guest.
+    let mut guess = x * 0.5
+    let mut i = 0
+    while i < 12 {
+        guess = 0.5 * (guess + x / guess)
+        i += 1
+    }
+    return guess
+}
+
+pub fn vec2_zero() -> Vec2 {
+    return Vec2{ x: 0.0, y: 0.0 }
+}
+
+pub fn vec2_one() -> Vec2 {
+    return Vec2{ x: 1.0, y: 1.0 }
+}
+
+pub fn (v Vec2) add(other: Vec2) -> Vec2 {
+    return Vec2{ x: v.x + other.x, y: v.y + other.y }
+}
+
+pub fn (v Vec2) sub(other: Vec2) -> Vec2 {
+    return Vec2{ x: v.x - other.x, y: v.y - other.y }
+}
+
+pub fn (v Vec2) scale(s: f32) -> Vec2 {
+    return Vec2{ x: v.x * s, y: v.y * s }
+}
+
+pub fn (v Vec2) dot(other: Vec2) -> f32 {
+    return v.x * other.x + v.y * other.y
+}
+
+pub fn (v Vec2) len_sq() -> f32 {
+    return v.x * v.x + v.y * v.y
+}
+
+pub fn (v Vec2) len() -> f32 {
+    return sqrt_f32(v.x * v.x + v.y * v.y)
+}
+
+pub fn (v Vec2) normalized() -> Vec2 {
+    let l = v.len()
+    if l > 0.00001 {
+        return Vec2{ x: v.x / l, y: v.y / l }
+    }
+    return vec2_zero()
+}
+
+pub fn (v Vec2) distance_to(other: Vec2) -> f32 {
+    return v.sub(other).len()
+}
+
+pub struct Vec3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32
+}
+
+pub fn vec3(x: f32, y: f32, z: f32) -> Vec3 {
+    return Vec3{ x: x, y: y, z: z }
+}
+
+pub fn vec3_zero() -> Vec3 {
+    return Vec3{ x: 0.0, y: 0.0, z: 0.0 }
+}
+
+pub fn (v Vec3) add(other: Vec3) -> Vec3 {
+    return Vec3{ x: v.x + other.x, y: v.y + other.y, z: v.z + other.z }
+}
+
+pub fn (v Vec3) sub(other: Vec3) -> Vec3 {
+    return Vec3{ x: v.x - other.x, y: v.y - other.y, z: v.z - other.z }
+}
+
+pub fn (v Vec3) scale(s: f32) -> Vec3 {
+    return Vec3{ x: v.x * s, y: v.y * s, z: v.z * s }
+}
+
+pub fn (v Vec3) dot(other: Vec3) -> f32 {
+    return v.x * other.x + v.y * other.y + v.z * other.z
+}
+
+pub fn (v Vec3) len_sq() -> f32 {
+    return v.x * v.x + v.y * v.y + v.z * v.z
+}
+
+pub fn (v Vec3) len() -> f32 {
+    return sqrt_f32(v.x * v.x + v.y * v.y + v.z * v.z)
+}
+
+pub struct Rect {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32
+}
+
+pub fn rect(x: f32, y: f32, w: f32, h: f32) -> Rect {
+    return Rect{ x: x, y: y, w: w, h: h }
+}
+
+pub fn (r Rect) right() -> f32 {
+    return r.x + r.w
+}
+
+pub fn (r Rect) bottom() -> f32 {
+    return r.y + r.h
+}
+
+pub fn (r Rect) center() -> Vec2 {
+    return Vec2{ x: r.x + r.w * 0.5, y: r.y + r.h * 0.5 }
+}
+
+pub fn (r Rect) contains(pt: Vec2) -> bool {
+    return pt.x >= r.x && pt.x <= (r.x + r.w) && pt.y >= r.y && pt.y <= (r.y + r.h)
+}
+
+pub fn (r Rect) intersects(other: Rect) -> bool {
+    return r.x < (other.x + other.w) && (r.x + r.w) > other.x &&
+           r.y < (other.y + other.h) && (r.y + r.h) > other.y
+}
+
+// Column-major 4x4 matrix, matching WebGPU/wgpu's uniform layout.
+pub struct Mat4 {
+    pub m: [16]f32
+}
+
+pub fn mat4_identity() -> Mat4 {
+    return Mat4{
+        m: [16]f32{
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0
+        }
+    }
+}
+
+pub fn (mat Mat4) at(i: i32) -> f32 {
+    return mat.m[i]
+}
+
+pub fn mat4_ortho(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) -> Mat4 {
+    let r_l = right - left
+    let t_b = top - bottom
+    let f_n = far - near
+
+    return Mat4{
+        m: [16]f32{
+            2.0 / r_l,           0.0,                 0.0,                0.0,
+            0.0,                 2.0 / t_b,           0.0,                0.0,
+            0.0,                 0.0,                -1.0 / f_n,          0.0,
+            -(right + left)/r_l, -(top + bottom)/t_b, -near / f_n,        1.0
+        }
+    }
+}
+
+pub fn mat4_mul(a: Mat4, b: Mat4) -> Mat4 {
+    let mut out = Mat4{ m: [16]f32{} }
+    let mut col = 0
+    while col < 4 {
+        let mut row = 0
+        while row < 4 {
+            let mut sum = 0.0
+            let mut k = 0
+            while k < 4 {
+                sum += a.m[k * 4 + row] * b.m[col * 4 + k]
+                k += 1
+            }
+            out.m[col * 4 + row] = sum
+            row += 1
+        }
+        col += 1
+    }
+    return out
+}
+
+pub fn mat4_transform_point(mat: Mat4, x: f32, y: f32) -> Vec2 {
+    let cx = mat.m[0] * x + mat.m[4] * y + mat.m[12]
+    let cy = mat.m[1] * x + mat.m[5] * y + mat.m[13]
+    let w = mat.m[3] * x + mat.m[7] * y + mat.m[15]
+    if w != 0.0 && w != 1.0 {
+        return Vec2{ x: cx / w, y: cy / w }
+    }
+    return Vec2{ x: cx, y: cy }
+}
+
+pub struct Transform {
+    pub position: Vec2,
+    pub rotation: f32,
+    pub scale: Vec2
+}
+
+pub fn transform_default() -> Transform {
+    return Transform{
+        position: vec2_zero(),
+        rotation: 0.0,
+        scale: Vec2{ x: 1.0, y: 1.0 }
+    }
+}
+
+pub fn transform_at(x: f32, y: f32) -> Transform {
+    return Transform{
+        position: vec2(x, y),
+        rotation: 0.0,
+        scale: Vec2{ x: 1.0, y: 1.0 }
+    }
+}

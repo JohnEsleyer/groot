@@ -1,0 +1,68 @@
+package app
+
+import "../render" as render
+import "../input" as input
+import "../time" as time
+import "../color" as color
+import "../platform" as platform
+
+pub struct EngineConfig {
+    pub width:  i32,
+    pub height: i32,
+    pub title:  string
+}
+
+pub struct App {
+    pub config:     EngineConfig,
+    pub batcher:    render::SpriteBatcher,
+    pub camera:     render::Camera2D,
+    pub input:      input::InputManager,
+    pub time:       time::TimeTracker,
+    pub clear:      color::Color,
+    pub is_running: bool
+}
+
+pub fn app_new(cfg: EngineConfig) -> App {
+    let w = cfg.width as f32
+    let h = cfg.height as f32
+    return App{
+        config:     move cfg,
+        batcher:    render::batcher_new(2048),
+        camera:     render::camera_new(w, h),
+        input:      input::input_new(),
+        time:       time::time_new(),
+        clear:      color::clear(),
+        is_running: true
+    }
+}
+
+pub fn (mut app App) start() {
+    platform::open_window_sized(app.config.width, app.config.height, app.config.title)
+    platform::setup(app.config.width, app.config.height)
+}
+
+pub fn (mut app App) begin_frame() {
+    app.batcher.clear()
+    app.input.begin_frame()
+}
+
+pub fn (mut app App) tick(now_nanos: i64) {
+    app.time.tick(now_nanos)
+}
+
+pub fn (mut app App) draw_rect(x: f32, y: f32, w: f32, h: f32, c: color::Color) {
+    app.batcher.draw_rect(x, y, w, h, move c)
+}
+
+pub fn (mut app App) draw_rect_xywh(x: f32, y: f32, w: f32, h: f32) {
+    app.batcher.draw_rect_rgba(x, y, w, h, 1.0, 1.0, 1.0, 1.0)
+}
+
+pub fn (mut app App) present() {
+    platform::submit(app.batcher.vertices)
+    platform::present(app.clear.r as f64, app.clear.g as f64, app.clear.b as f64)
+}
+
+pub fn (mut app App) stop() {
+    app.is_running = false
+}

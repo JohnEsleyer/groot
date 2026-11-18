@@ -1,0 +1,66 @@
+package main
+
+import "../../pkgs/groot" as groot
+
+struct Bunny {
+    x: f32,
+    y: f32,
+    vx: f32,
+    vy: f32
+}
+
+fn main() {
+    let mut cfg = groot::default_config()
+    cfg.title = "Groot Engine - Bunnymark Benchmark"
+    let mut app = groot::app_new(cfg)
+
+    let mut bunnies = []Bunny{}
+    let mut i = 0
+    while i < 1000 {
+        bunnies.push(Bunny{
+            x: 640.0,
+            y: 360.0,
+            vx: (i % 10) as f32 * 20.0 - 100.0,
+            vy: (i % 7) as f32 * 20.0 - 70.0
+        })
+        i += 1
+    }
+
+    let gravity: f32 = 980.0
+    let dt: f32 = 0.016666
+
+    // Frame arena loop: all intermediate frame maths and transient allocations
+    // are automatically wiped at the end of each iteration in 1 instruction.
+    arena while app.running {
+        app.batcher.clear()
+
+        let mut b_idx = 0
+        while b_idx < bunnies.len {
+            bunnies[b_idx].x += bunnies[b_idx].vx * dt
+            bunnies[b_idx].y += bunnies[b_idx].vy * dt
+            bunnies[b_idx].vy += gravity * dt
+
+            if bunnies[b_idx].x < 0.0 || bunnies[b_idx].x > 1280.0 {
+                bunnies[b_idx].vx = -bunnies[b_idx].vx
+            }
+            if bunnies[b_idx].y > 720.0 {
+                bunnies[b_idx].y = 720.0
+                bunnies[b_idx].vy = -bunnies[b_idx].vy * 0.85
+            }
+
+            app.batcher.draw_quad(
+                bunnies[b_idx].x,
+                bunnies[b_idx].y,
+                16.0,
+                16.0,
+                groot::color_green()
+            )
+            b_idx += 1
+        }
+
+        if app.batcher.vertices.len > 0 {
+            groot::host_gpu_submit_vertices(app.batcher.vertices.ptr, app.batcher.vertices.len)
+        }
+        groot::host_gpu_draw(0.05, 0.05, 0.08)
+    }
+}

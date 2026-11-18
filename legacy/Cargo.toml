@@ -1,0 +1,71 @@
+[package]
+name = "groot"
+version = "0.1.0"
+edition = "2021"
+description = "Groot: a fast-iteration 2D/3D game engine powered by wgpu and GoScript"
+default-run = "groot-demo"
+
+[lib]
+name = "groot"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "groot"
+path = "src/bin/cli.rs"
+
+[[bin]]
+name = "groot-demo"
+path = "src/main.rs"
+
+[dependencies]
+# Graphics & Windowing
+wgpu = "0.19"
+winit = "0.29"
+glam = "0.27"
+bytemuck = { version = "1.14", features = ["derive"] }
+pollster = "0.3"
+
+# ECS & Asset Serialization
+hecs = "0.10"
+serde = { version = "1", features = ["derive"] }
+ron = "0.8"
+
+# Logging & Utilities
+log = "0.4"
+env_logger = "0.11"
+
+# GoScript scripting engine
+goscript = { git = "https://github.com/johnesleyer/goscript", branch = "main" }
+
+# Binary asset embedding
+rust-embed = { version = "8.4", features = ["debug-embed"] }
+
+# PNG image decoding for 2D sprite textures
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+# Patch goscript to use local copy
+[patch."https://github.com/johnesleyer/goscript"]
+goscript = { path = "../goscript" }
+
+# Android Mobile Target Dependencies
+# winit needs its `android-native-activity` feature so the event loop can
+# attach the `AndroidApp` handed to `android_main`.
+[target.'cfg(target_os = "android")'.dependencies]
+winit = { version = "0.29", features = ["android-native-activity"] }
+android-activity = { version = "0.5", features = ["native-activity"] }
+android_logger = "0.13"
+
+[package.metadata.android]
+build-targets = ["aarch64-linux-android"]
+
+[package.metadata.android.sdk]
+target_sdk_version = 34
+min_sdk_version = 26
+
+[profile.dev]
+opt-level = 1
+
+# Disable debug assertion checks specifically inside android-activity to prevent from_raw_parts startup panic
+[profile.dev.package.android-activity]
+debug-assertions = false

@@ -1,0 +1,51 @@
+package groot
+
+pub struct InputState {
+    pub key_down_states: [256]bool,
+    pub mouse_down_states: [4]bool,
+    pub mouse_x: f32,
+    pub mouse_y: f32
+}
+
+pub fn input_new() -> InputState {
+    return InputState{
+        key_down_states: [256]bool{
+            false, false, false, false, false, false, false, false,
+            false, false, false, false, false, false, false, false
+        },
+        mouse_down_states: [4]bool{false, false, false, false},
+        mouse_x: 0.0,
+        mouse_y: 0.0
+    }
+}
+
+pub fn (view in: InputState) is_key_down(code: i32) -> bool {
+    if code >= 0 && code < 256 {
+        return in.key_down_states[code]
+    }
+    return false
+}
+
+pub fn (view in: InputState) is_mouse_down(button: i32) -> bool {
+    if button >= 0 && button < 4 {
+        return in.mouse_down_states[button]
+    }
+    return false
+}
+
+pub fn (mut in: InputState) on_key_event(code: i32, is_pressed: bool) {
+    if code >= 0 && code < 256 {
+        in.key_down_states[code] = is_pressed
+    }
+}
+
+pub fn (mut in: InputState) on_mouse_event(button: i32, is_pressed: bool) {
+    if button >= 0 && button < 4 {
+        in.mouse_down_states[button] = is_pressed
+    }
+}
+
+pub fn (mut in: InputState) on_mouse_move(x: f32, y: f32) {
+    in.mouse_x = x
+    in.mouse_y = y
+}

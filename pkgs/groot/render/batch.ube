@@ -1,0 +1,90 @@
+package render
+
+import "../math" as math
+import "../color" as color
+
+// Flat vertex layout consumed by the native host:
+//   [x, y, u, v, r, g, b, a]
+// Six vertices (two triangles) per quad, no index buffer required.
+pub struct SpriteBatcher {
+    pub vertices:     []f32,
+    pub vertex_count: i32,
+    pub capacity:     i32
+}
+
+pub fn batcher_new(quad_capacity: i32) -> SpriteBatcher {
+    let mut verts = []f32{}
+    if quad_capacity > 0 {
+        // Reserve once, then reset the length. Push never reallocates for a
+        // batch that fits the requested quad capacity.
+        verts.resize(quad_capacity * 48)
+        verts.clear()
+    }
+    return SpriteBatcher{
+        vertices:     move verts,
+        vertex_count: 0,
+        capacity:     quad_capacity
+    }
+}
+
+pub fn (mut b SpriteBatcher) clear() {
+    b.vertices.clear()
+    b.vertex_count = 0
+}
+
+pub fn (b SpriteBatcher) quad_count() -> i32 {
+    return b.vertex_count / 6
+}
+
+pub fn (b SpriteBatcher) triangle_count() -> i32 {
+    return b.vertex_count / 3
+}
+
+fn (mut b SpriteBatcher) push_vertex(x: f32, y: f32, u: f32, v: f32, r: f32, g: f32, bl: f32, a: f32) {
+    b.vertices.push(x)
+    b.vertices.push(y)
+    b.vertices.push(u)
+    b.vertices.push(v)
+    b.vertices.push(r)
+    b.vertices.push(g)
+    b.vertices.push(bl)
+    b.vertices.push(a)
+    b.vertex_count += 1
+}
+
+pub fn (mut b SpriteBatcher) draw_quad(
+    x: f32, y: f32, w: f32, h: f32,
+    u0: f32, v0: f32, u1: f32, v1: f32,
+    c: color::Color
+) {
+    let x1 = x
+    let y1 = y
+    let x2 = x + w
+    let y2 = y + h
+
+    // Triangle 1
+    b.push_vertex(x1, y1, u0, v0, c.r, c.g, c.b, c.a)
+    b.push_vertex(x2, y1, u1, v0, c.r, c.g, c.b, c.a)
+    b.push_vertex(x1, y2, u0, v1, c.r, c.g, c.b, c.a)
+
+    // Triangle 2
+    b.push_vertex(x1, y2, u0, v1, c.r, c.g, c.b, c.a)
+    b.push_vertex(x2, y1, u1, v0, c.r, c.g, c.b, c.a)
+    b.push_vertex(x2, y2, u1, v1, c.r, c.g, c.b, c.a)
+}
+
+pub fn (mut b SpriteBatcher) draw_rect(x: f32, y: f32, w: f32, h: f32, c: color::Color) {
+    b.draw_quad(x, y, w, h, 0.0, 0.0, 1.0, 1.0, move c)
+}
+
+pub fn (mut b SpriteBatcher) draw_rect_struct(view r: math::Rect, c: color::Color) {
+    b.draw_quad(r.x, r.y, r.w, r.h, 0.0, 0.0, 1.0, 1.0, move c)
+}
+
+pub fn (mut b SpriteBatcher) draw_rect_rgba(
+    x: f32, y: f32, w: f32, h: f32,
+    cr: f32, cg: f32, cb: f32, ca: f32
+) {
+    let c = color::rgba(cr, cg, cb, ca)
+    b.draw_quad(x, y, w, h, 0.0, 0.0, 1.0, 1.0, move c)
+}

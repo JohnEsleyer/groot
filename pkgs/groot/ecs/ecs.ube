@@ -1,0 +1,111 @@
+package ecs
+
+import "../math" as math
+import "../color" as color
+
+pub struct Sprite {
+    pub size:  math::Vec2,
+    pub color: color::Color
+}
+
+pub fn sprite(w: f32, h: f32, c: color::Color) -> Sprite {
+    return Sprite{ size: math::vec2(w, h), color: move c }
+}
+
+pub struct RigidBody {
+    pub velocity:  math::Vec2,
+    pub mass:      f32,
+    pub is_static: bool
+}
+
+pub fn rigid_body(vx: f32, vy: f32, mass: f32, is_static: bool) -> RigidBody {
+    return RigidBody{
+        velocity:  math::vec2(vx, vy),
+        mass:      mass,
+        is_static: is_static
+    }
+}
+
+// Entity snapshots are flat values: they can live in a `Pool[Entity]` without
+// any heap indirection.
+pub struct Entity {
+    pub id:        i32,
+    pub active:    bool,
+    pub transform: math::Transform,
+    pub sprite:    Sprite?,
+    pub body:      RigidBody?
+}
+
+pub struct World {
+    pub entities: Pool[Entity],
+    pub next_id:  i32
+}
+
+pub fn world_new(capacity: i32) -> World {
+    return World{
+        entities: Pool[Entity].new(capacity),
+        next_id:  1
+    }
+}
+
+pub fn (mut w World) create_entity(pos: math::Vec2) -> UbeHandle {
+    let e = Entity{
+        id:        w.next_id,
+        active:    true,
+        transform: math::Transform{
+            position: move pos,
+            rotation: 0.0,
+            scale:    math::vec2(1.0, 1.0)
+        },
+        sprite:    none,
+        body:      none
+    }
+    w.next_id += 1
+    return w.entities.spawn(move e)
+}
+
+pub fn (mut w World) create_sprite_entity(
+    x: f32, y: f32, sx: f32, sy: f32, c: color::Color
+) -> UbeHandle {
+    let e = Entity{
+        id:        w.next_id,
+        active:    true,
+        transform: math::transform_at(x, y),
+        sprite:    Sprite{ size: math::vec2(sx, sy), color: move c },
+        body:      none
+    }
+    w.next_id += 1
+    return w.entities.spawn(move e)
+}
+
+pub fn (mut w World) create_sprite_rgba(
+    x: f32, y: f32, sx: f32, sy: f32,
+    r: f32, g: f32, b: f32, a: f32
+) -> UbeHandle {
+    return w.create_sprite_entity(x, y, sx, sy, color::rgba(r, g, b, a))
+}
+
+pub fn (w World) get(handle: UbeHandle) -> Entity? {
+    if let e = w.entities.get(handle) {
+        return e
+    }
+    return none
+}
+
+pub fn (w World) is_alive(handle: UbeHandle) -> bool {
+    if let _ = w.entities.get(handle) {
+        return true
+    }
+    return false
+}
+
+pub fn (mut w World) despawn(handle: UbeHandle) {
+    w.entities.despawn(handle)
+}
+
+// Ube's `Pool.get` returns a value snapshot. Replacing a slot therefore takes a
+// new entity value and returns the new generational handle.
+pub fn (mut w World) replace(handle: UbeHandle, e: Entity) -> UbeHandle {
+    w.entities.despawn(handle)
+    return w.entities.spawn(move e)
+}

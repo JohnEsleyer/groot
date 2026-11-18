@@ -1,0 +1,40 @@
+package time
+
+pub struct TimeTracker {
+    pub delta_time:  f32,
+    pub total_time:  f64,
+    pub frame_count: i64,
+    pub last_nanos:  i64
+}
+
+pub fn time_new() -> TimeTracker {
+    return TimeTracker{
+        delta_time:  0.016666,
+        total_time:  0.0,
+        frame_count: 0,
+        last_nanos:  0
+    }
+}
+
+pub fn (mut t TimeTracker) tick(current_nanos: i64) {
+    if t.last_nanos > 0 {
+        let diff = (current_nanos - t.last_nanos) as f64
+        t.delta_time = (diff / (1000000000.0 as f64)) as f32
+        if t.delta_time > 0.1 {
+            t.delta_time = 0.1
+        }
+        if t.delta_time < 0.0 {
+            t.delta_time = 0.0
+        }
+    }
+    t.last_nanos = current_nanos
+    t.total_time += t.delta_time as f64
+    t.frame_count += 1
+}
+
+pub fn (t TimeTracker) fps() -> f32 {
+    if t.delta_time <= 0.0 {
+        return 0.0
+    }
+    return 1.0 / t.delta_time
+}

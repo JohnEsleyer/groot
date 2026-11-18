@@ -1,0 +1,33 @@
+package color
+
+pub struct Color {
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+    pub a: f32
+}
+
+pub fn rgba(r: f32, g: f32, b: f32, a: f32) -> Color {
+    return Color{ r: r, g: g, b: b, a: a }
+}
+
+pub fn rgb(r: f32, g: f32, b: f32) -> Color {
+    return Color{ r: r, g: g, b: b, a: 1.0 }
+}
+
+pub fn white() -> Color { return rgba(1.0, 1.0, 1.0, 1.0) }
+pub fn black() -> Color { return rgba(0.0, 0.0, 0.0, 1.0) }
+pub fn red()   -> Color { return rgba(1.0, 0.1, 0.1, 1.0) }
+pub fn green() -> Color { return rgba(0.1, 1.0, 0.2, 1.0) }
+pub fn blue()  -> Color { return rgba(0.2, 0.4, 1.0, 1.0) }
+pub fn yellow() -> Color { return rgba(1.0, 0.9, 0.1, 1.0) }
+pub fn clear() -> Color { return rgba(0.08, 0.08, 0.12, 1.0) }
+
+pub fn lerp(a: Color, b: Color, t: f32) -> Color {
+    return Color{
+        r: a.r + (b.r - a.r) * t,
+        g: a.g + (b.g - a.g) * t,
+        b: a.b + (b.b - a.b) * t,
+        a: a.a + (b.a - a.a) * t
+    }
+}

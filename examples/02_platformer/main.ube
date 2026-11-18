@@ -1,0 +1,89 @@
+package main
+
+// 02 — Platformer: simulated input, gravity, and AABB collision, rendered by
+// the native Groot host.
+
+import "../../pkgs/groot/math" as math
+import "../../pkgs/groot/color" as color
+import "../../pkgs/groot/render" as render
+import "../../pkgs/groot/input" as input
+import "../../pkgs/groot/physics2d" as physics2d
+import "../../pkgs/groot/platform" as platform
+
+struct Player {
+    x: f32,
+    y: f32,
+    vx: f32,
+    vy: f32,
+    grounded: bool
+}
+
+fn main() {
+    platform::open_window(800, 600, "Groot — 2D Platformer")
+
+    let mut player = Player{
+        x: 100.0,
+        y: 300.0,
+        vx: 0.0,
+        vy: 0.0,
+        grounded: false
+    }
+    let mut controls = input::input_new()
+
+    let ground_y = 500.0
+    let obstacle_x = 350.0
+    let obstacle_y = 440.0
+    let dt = 0.016
+
+    let mut frame: i32 = 0
+    arena while frame < 180 {
+        controls.begin_frame()
+
+        if frame == 20 {
+            controls.feed_event(0, input::key_space(), 0.0, 0.0)
+        }
+        if controls.is_key_pressed(input::key_space()) && player.grounded {
+            player.vy = -400.0
+            player.grounded = false
+        }
+
+        // Gravity.
+        player.vy += 980.0 * dt
+        player.x += player.vx * dt
+        player.y += player.vy * dt
+
+        // Ground collision.
+        let player_rect = math::rect(player.x, player.y, 24.0, 40.0)
+        let ground_rect = math::rect(0.0, ground_y, 800.0, 100.0)
+        if physics2d::overlaps(player_rect, ground_rect) {
+            player.y = ground_y - 40.0
+            player.vy = 0.0
+            player.grounded = true
+        }
+
+        // Obstacle collision (AABB manifold).
+        let obstacle = math::rect(obstacle_x, obstacle_y, 60.0, 60.0)
+        let hit = physics2d::check_aabb_xy(
+            player.x + 12.0, player.y + 20.0, 24.0, 40.0,
+            obstacle_x + 30.0, obstacle_y + 30.0, 60.0, 60.0
+        )
+        if hit.has_collision && player.y + 40.0 > obstacle_y {
+            player.y = obstacle_y - 40.0
+            player.vy = 0.0
+            player.grounded = true
+        }
+
+        let mut batch = render::batcher_new(4)
+        batch.draw_rect_struct(math::rect(0.0, ground_y, 800.0, 100.0), color::green())
+        batch.draw_rect_struct(math::rect(obstacle_x, obstacle_y, 60.0, 60.0), color::red())
+        batch.draw_rect_rgba(player.x, player.y, 24.0, 40.0, 0.2, 0.5, 1.0, 1.0)
+
+        if frame == 179 {
+            platform::submit(batch.vertices)
+            platform::present(0.08, 0.08, 0.12)
+            println(f"Platformer finished at frame {frame} (grounded={player.grounded}).")
+        }
+
+        frame += 1
+    }
+}

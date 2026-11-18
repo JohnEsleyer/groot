@@ -1,0 +1,31 @@
+package groot
+
+pub struct Mat4 {
+    pub m: [16]f32
+}
+
+pub fn mat4_identity() -> Mat4 {
+    return Mat4{
+        m: [16]f32{
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0
+        }
+    }
+}
+
+pub fn mat4_ortho(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) -> Mat4 {
+    let r_l = right - left
+    let t_b = top - bottom
+    let f_n = far - near
+
+    return Mat4{
+        m: [16]f32{
+            2.0 / r_l,           0.0,                 0.0,                0.0,
+            0.0,                 2.0 / t_b,           0.0,                0.0,
+            0.0,                 0.0,                -2.0 / f_n,          0.0,
+            -(right + left)/r_l, -(top + bottom)/t_b, -(far + near)/f_n, 1.0
+        }
+    }
+}

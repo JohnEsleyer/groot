@@ -1,0 +1,54 @@
+package groot
+
+// 8 floats per vertex: [x, y, u, v, r, g, b, a]
+// 6 vertices per quad (2 triangles) = 48 floats per quad.
+pub struct SpriteBatcher {
+    pub vertices: []f32,
+    pub quad_count: i32
+}
+
+pub fn sprite_batcher_new(capacity_quads: i32) -> SpriteBatcher {
+    return SpriteBatcher{
+        vertices: []f32{},
+        quad_count: 0
+    }
+}
+
+pub fn (mut sb SpriteBatcher) clear() {
+    sb.vertices.clear()
+    sb.quad_count = 0
+}
+
+pub fn (mut sb SpriteBatcher) draw_quad(
+    x: f32, y: f32,
+    w: f32, h: f32,
+    color: Color
+) {
+    let x0 = x
+    let y0 = y
+    let x1 = x + w
+    let y1 = y + h
+
+    // Triangle 1: (x0, y0), (x1, y0), (x1, y1)
+    sb.push_vertex(x0, y0, 0.0, 0.0, color)
+    sb.push_vertex(x1, y0, 1.0, 0.0, color)
+    sb.push_vertex(x1, y1, 1.0, 1.0, color)
+
+    // Triangle 2: (x0, y0), (x1, y1), (x0, y1)
+    sb.push_vertex(x0, y0, 0.0, 0.0, color)
+    sb.push_vertex(x1, y1, 1.0, 1.0, color)
+    sb.push_vertex(x0, y1, 0.0, 1.0, color)
+
+    sb.quad_count += 1
+}
+
+fn (mut sb SpriteBatcher) push_vertex(x: f32, y: f32, u: f32, v: f32, c: Color) {
+    sb.vertices.push(x)
+    sb.vertices.push(y)
+    sb.vertices.push(u)
+    sb.vertices.push(v)
+    sb.vertices.push(c.r)
+    sb.vertices.push(c.g)
+    sb.vertices.push(c.b)
+    sb.vertices.push(c.a)
+}

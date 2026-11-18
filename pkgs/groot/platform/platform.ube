@@ -1,0 +1,50 @@
+package platform
+
+// Thin guest-side bridge to the native Groot host. These imports are lowered
+// through the WASI 0.2 Component Model Canonical ABI into the Rust/wgpu host.
+// They mirror `std`'s `ube:graphics` contracts; keeping them here means the
+// engine does not depend on `_external`.
+
+extern "ube:graphics/window@0.2.0" fn "create-window" host_window_create(
+    width: i32,
+    height: i32,
+    title_ptr: i32,
+    title_len: i32
+)
+
+extern "ube:graphics/gpu@0.2.0" fn "setup" host_gpu_setup(width: i32, height: i32)
+
+extern "ube:graphics/gpu@0.2.0" fn "set-vertices" host_gpu_set_vertices(
+    ptr: i32,
+    len: i32
+)
+
+extern "ube:graphics/gpu@0.2.0" fn "draw-frame" host_gpu_draw(r: f64, g: f64, b: f64)
+
+pub struct WindowConfig {
+    pub width: i32,
+    pub height: i32,
+    pub title: string
+}
+
+pub fn open_window(width: i32, height: i32, view title: string) {
+    host_window_create(width, height, title.ptr, title.len)
+}
+
+pub fn open_window_config(view cfg: WindowConfig) {
+    host_window_create(cfg.width, cfg.height, cfg.title.ptr, cfg.title.len)
+}
+
+pub fn setup(width: i32, height: i32) {
+    host_gpu_setup(width, height)
+}
+
+/// Upload a flat vertex buffer ([x, y, u, v, r, g, b, a] per vertex).
+pub fn submit(view vertices: []f32) {
+    host_gpu_set_vertices(vertices.ptr, vertices.len)
+}
+
+/// Present one frame with the given clear color.
+pub fn present(r: f64, g: f64, b: f64) {
+    host_gpu_draw(r, g, b)
+}

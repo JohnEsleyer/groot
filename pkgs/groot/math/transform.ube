@@ -1,0 +1,15 @@
+package groot
+
+pub struct Transform {
+    pub position: Vec2,
+    pub rotation: f32,
+    pub scale: Vec2
+}
+
+pub fn transform_default() -> Transform {
+    return Transform{
+        position: vec2_zero(),
+        rotation: 0.0,
+        scale: vec2_one()
+    }
+}
