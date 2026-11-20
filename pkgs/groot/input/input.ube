@@ -61,17 +61,26 @@ pub fn key_down() -> i32 { return 40 }
 
 // Alias and manager struct for higher-level loops
 pub struct InputManager {
-    pub state: InputState
+    pub state: InputState,
+    pub prev_key_down_states: [256]bool
 }
 
 pub fn manager_new() -> InputManager {
     return InputManager{
-        state: input_new()
+        state: input_new(),
+        prev_key_down_states: [256]bool{
+            false, false, false, false, false, false, false, false,
+            false, false, false, false, false, false, false, false
+        }
     }
 }
 
 pub fn (mut m InputManager) begin_frame() {
-    // Reset transient frame triggers if needed
+    let mut i = 0
+    while i < 256 {
+        m.prev_key_down_states[i] = m.state.key_down_states[i]
+        i = i + 1
+    }
 }
 
 pub fn (mut m InputManager) feed_event(kind: i32, code: i32, x: f32, y: f32) {
@@ -93,5 +102,8 @@ pub fn (view m InputManager) is_key_down(code: i32) -> bool {
 }
 
 pub fn (view m InputManager) is_key_pressed(code: i32) -> bool {
-    return m.state.is_key_down(code)
+    if code >= 0 && code < 256 {
+        return m.state.key_down_states[code] && !m.prev_key_down_states[code]
+    }
+    return false
 }

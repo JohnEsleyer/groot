@@ -6,6 +6,7 @@ use gpu::GpuRenderer;
 use input::{InputQueue, RawInputEvent};
 use std::env;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiView};
@@ -27,6 +28,8 @@ struct HostState {
     wasi: WasiCtx,
     table: ResourceTable,
     event_loop: Arc<SendEventLoop>,
+    frame_interval: Duration,
+    next_frame: Option<Instant>,
 }
 
 impl WasiView for HostState {
@@ -57,6 +60,27 @@ impl ube::graphics::window::Host for HostState {
     }
 }
 
+
+impl ube::graphics::input::Host for HostState {
+    fn is_key_down(&mut self, code: u32) -> bool {
+        self.inputs.lock().unwrap().keys_down.contains(&code)
+    }
+    fn is_mouse_down(&mut self, button: u32) -> bool {
+        let q = self.inputs.lock().unwrap();
+        if (button as usize) < q.mouse_down.len() {
+            q.mouse_down[button as usize]
+        } else {
+            false
+        }
+    }
+    fn mouse_x(&mut self) -> f32 {
+        self.inputs.lock().unwrap().mouse_x
+    }
+    fn mouse_y(&mut self) -> f32 {
+        self.inputs.lock().unwrap().mouse_y
+    }
+}
+
 impl ube::graphics::gpu::Host for HostState {
     fn setup(&mut self, width: u32, height: u32) {
         self.gpu.resize(width.max(1), height.max(1));
@@ -67,6 +91,17 @@ impl ube::graphics::gpu::Host for HostState {
     }
 
     fn draw_frame(&mut self, r: f64, g: f64, b: f64) {
+        // The guest owns the frame loop, so the host can only pace it at the
+        // present boundary. Sleep until the next deadline; if the guest is
+        // behind schedule, re-anchor instead of accumulating debt.
+        let now = Instant::now();
+        if let Some(target) = self.next_frame {
+            if target > now {
+                std::thread::sleep(target - now);
+            }
+        }
+        self.next_frame = Some(Instant::now() + self.frame_interval);
+
         self.gpu.draw_frame(r, g, b);
     }
 }
@@ -98,6 +133,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     wasmtime_wasi::add_to_linker_sync(&mut linker)?;
     ube::graphics::window::add_to_linker(&mut linker, |state: &mut HostState| state)?;
     ube::graphics::gpu::add_to_linker(&mut linker, |state: &mut HostState| state)?;
+    ube::graphics::input::add_to_linker(&mut linker, |state: &mut HostState| state)?;
 
     let wasi = WasiCtxBuilder::new()
         .inherit_stdout()
@@ -106,6 +142,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build();
 
     let inputs = Arc::new(Mutex::new(InputQueue::new()));
+    let frame_interval = Duration::from_secs_f64(
+        1.0 / env::var("GROOT_FPS")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+            .filter(|fps| *fps > 0.0)
+            .unwrap_or(60.0),
+    );
     let mut store = Store::new(
         &engine,
         HostState {
@@ -115,6 +158,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             wasi,
             table: ResourceTable::new(),
             event_loop: Arc::clone(&event_loop_cell),
+            frame_interval,
+            next_frame: None,
         },
     );
 
@@ -179,6 +224,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ..
             } => {
                 let kind = if state == ElementState::Pressed { 3 } else { 4 };
+                let is_pressed = state == ElementState::Pressed;
                 let code = match button {
                     MouseButton::Left => 1,
                     MouseButton::Right => 2,
@@ -186,6 +232,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     _ => 0,
                 };
                 let mut q = store.data().inputs.lock().unwrap();
+                q.on_mouse_button(code, is_pressed);
                 let (mx, my) = (q.mouse_x, q.mouse_y);
                 q.push(RawInputEvent {
                     event_type: kind,
@@ -200,11 +247,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ..
             } => {
                 let kind = if event.state == ElementState::Pressed { 0 } else { 1 };
+                let is_pressed = event.state == ElementState::Pressed;
                 let code = match event.physical_key {
                     PhysicalKey::Code(code) => key_code_to_u32(code),
                     _ => 0,
                 };
                 let mut q = store.data().inputs.lock().unwrap();
+                q.on_key(code, is_pressed);
                 let (mx, my) = (q.mouse_x, q.mouse_y);
                 q.push(RawInputEvent {
                     event_type: kind,

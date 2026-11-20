@@ -10,8 +10,16 @@ interface gpu {
     draw-frame: func(r: f64, g: f64, b: f64);
 }
 
+interface input {
+    is-key-down: func(code: u32) -> bool;
+    is-mouse-down: func(button: u32) -> bool;
+    mouse-x: func() -> f32;
+    mouse-y: func() -> f32;
+}
+
 world groot-runner {
     import window;
     import gpu;
+    import input;
     include wasi:cli/command@0.2.0;
 }

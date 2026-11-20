@@ -22,6 +22,7 @@ pub struct GpuRenderer {
     config: Option<SurfaceConfiguration>,
     pipeline: Option<RenderPipeline>,
     vertex_buffer: Option<Buffer>,
+    vertex_buffer_capacity: usize,
     vertex_count: u32,
     viewport_buffer: Option<Buffer>,
     bind_group: Option<BindGroup>,
@@ -42,6 +43,7 @@ impl GpuRenderer {
             config: None,
             pipeline: None,
             vertex_buffer: None,
+            vertex_buffer_capacity: 0,
             vertex_count: 0,
             viewport_buffer: None,
             bind_group: None,
@@ -266,28 +268,31 @@ impl GpuRenderer {
 
     /// Upload a flat vertex buffer. Six vertices per un-indexed quad.
     pub fn upload_vertices(&mut self, floats: &[f32]) {
-        let Some(device) = self.device.as_ref() else {
+        let (Some(device), Some(queue)) = (self.device.as_ref(), self.queue.as_ref()) else {
             return;
         };
 
         self.vertex_count = (floats.len() / FLOATS_PER_VERTEX) as u32;
         if floats.is_empty() {
-            self.vertex_buffer = None;
             return;
         }
 
         let byte_len = floats.len() * std::mem::size_of::<f32>();
-        let buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("Groot Dynamic Vertex Buffer"),
-            size: (byte_len.max(4)) as u64,
-            usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        if let Some(queue) = self.queue.as_ref() {
-            queue.write_buffer(&buffer, 0, bytemuck::cast_slice(floats));
+        if self.vertex_buffer.is_none() || byte_len > self.vertex_buffer_capacity {
+            let new_cap = byte_len.max(1024).next_power_of_two();
+            let buffer = device.create_buffer(&BufferDescriptor {
+                label: Some("Groot Dynamic Vertex Buffer"),
+                size: new_cap as u64,
+                usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.vertex_buffer = Some(buffer);
+            self.vertex_buffer_capacity = new_cap;
         }
-        self.vertex_buffer = Some(buffer);
+
+        if let Some(buf) = self.vertex_buffer.as_ref() {
+            queue.write_buffer(buf, 0, bytemuck::cast_slice(floats));
+        }
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
