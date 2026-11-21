@@ -10,6 +10,7 @@
 *.swo
 .DS_Store
 
+# Textify
 textify.yaml
 codebase.txt
 
