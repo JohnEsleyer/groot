@@ -1,0 +1,105 @@
+# ==============================================================================
+# Textify Configuration (textify.yaml)
+# ==============================================================================
+#
+# output_file:   Path where merged codebase text is saved (default: codebase.txt).
+# format:        Output format: "tags" (recommended for LLMs), "raw", or "markdown".
+# tree:          Prepend ASCII directory structure tree (default: true).
+# max_file_size: Max file size in bytes to include (default: 512000 / 500KB).
+#
+# ------------------------------------------------------------------------------
+# HOW TO CONFIGURE DIRECTORIES (dirs:)
+# ------------------------------------------------------------------------------
+# Every key under 'dirs:' is a directory path relative to project root (use "." for root).
+# Do NOT use leading slashes in dir keys (e.g., use "cmd", NOT "/cmd").
+#
+# RULE OPTIONS PER DIRECTORY:
+#   enabled:            (bool)   true to scan this folder, false to skip it and its children.
+#                                NOTE: 'enabled' only takes true/false. Do NOT put file lists here.
+#   include:            ([list]) Specific files or subfolders to Force Include.
+#                                Overrides .gitignore and extension filters!
+#                                Examples: [config, targets/golang, errors.go]
+#   exclude:            ([list]) Specific files or subfolders to Force Exclude (highest priority).
+#                                Examples: [targets/html, targets/jvm, obsolete.go]
+#   extensions:         ([list]) Allow-list of extensions (e.g., [go, md, json]).
+#                                If omitted, inherits from parent or allows text files.
+#   exclude_extensions: ([list]) Block-list of extensions (e.g., [log, tmp, lock]).
+#   group:              (string) Group name to categorize this folder (e.g., api, core, models).
+#   compact:            (bool)   true to strip non-essential whitespace to save LLM tokens.
+#
+# RULE EVALUATION PRECEDENCE:
+#   1. System exclusions (.git, textify.yaml, output_file)
+#   2. Force Exclude (exclude list) - highest priority
+#   3. Force Include (include list) - overrides gitignore and extension filters
+#   4. Gitignore (.gitignore at root and subfolders)
+#   5. Extension block-list (exclude_extensions)
+#   6. Extension allow-list (extensions)
+#
+# GROUP EXTRACTION MODES (Signatures vs Full Code):
+#   signatures_groups:  ([list]) Groups that should be extracted as signatures only.
+#   full_code_groups:   ([list]) Groups that should be extracted as full code.
+#   groups:             (map)    Map of group name to mode ("signatures" or "full").
+#
+# COMMON CLI COMMANDS:
+#   textify check              Validate textify.yaml and inspect active directory rules.
+#   textify scan               Auto-detect new folders and update textify.yaml.
+#   textify start              Bundle full project codebase into context file.
+#   textify signatures         Export symbol signatures (functions, structs, classes).
+#   textify tokens             List folders and estimated token sizes.
+# ==============================================================================
+
+output_file: codebase.txt
+format: tags
+tree: true
+max_file_size: 512000
+dirs:
+    .:
+        enabled: true
+        extensions:
+            - gitignore
+            - md
+            - ube
+            - rs
+            - ron
+            - gos
+            - txt
+            - wit
+            - lock
+            - toml
+    _docs:
+        enabled: true
+        extensions:
+            - md
+    docs:
+        enabled: true
+        extensions:
+            - md
+    examples:
+        enabled: true
+        extensions:
+            - md
+            - ube
+    host:
+        enabled: true
+        extensions:
+            - toml
+            - rs
+    legacy:
+        enabled: true
+        extensions:
+            - ron
+            - gos
+            - rs
+            - lock
+            - toml
+            - md
+    pkgs:
+        enabled: true
+        extensions:
+            - ube
+    target:
+        enabled: false
+    wit:
+        enabled: true
+        extensions:
+            - wit
