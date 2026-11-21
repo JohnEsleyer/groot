@@ -85,7 +85,7 @@ dirs:
             - toml
             - rs
     legacy:
-        enabled: true
+        enabled: false
         extensions:
             - ron
             - gos
