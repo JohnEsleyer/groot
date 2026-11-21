@@ -117,8 +117,9 @@ pub fn (c Camera2D) world_to_screen(world_pos: math::Vec2) -> math::Vec2 {
 pub fn (c Camera2D) screen_to_world(screen_pos: math::Vec2) -> math::Vec2 {
     let half_w = c.viewport_width * 0.5
     let half_h = c.viewport_height * 0.5
+    let z = if c.zoom > 0.00001 { c.zoom } else { 0.00001 }
     return math::Vec2{
-        x: (screen_pos.x - half_w) / c.zoom + c.position.x,
-        y: (screen_pos.y - half_h) / c.zoom + c.position.y
+        x: (screen_pos.x - half_w) / z + c.position.x,
+        y: (screen_pos.y - half_h) / z + c.position.y
     }
 }

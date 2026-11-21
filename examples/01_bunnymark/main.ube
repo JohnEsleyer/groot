@@ -40,16 +40,21 @@ fn main() {
     while game.is_running && frame < 300 {
         let mut b_idx = 0
         while b_idx < bunnies.len {
-            bunnies[b_idx].x += bunnies[b_idx].vx * dt
-            bunnies[b_idx].y += bunnies[b_idx].vy * dt
-            bunnies[b_idx].vy += gravity * dt
+            let nx = bunnies[b_idx].x + bunnies[b_idx].vx * dt
+            let ny = bunnies[b_idx].y + bunnies[b_idx].vy * dt
+            let nvy = bunnies[b_idx].vy + gravity * dt
+            bunnies[b_idx].x = nx
+            bunnies[b_idx].y = ny
+            bunnies[b_idx].vy = nvy
 
             if bunnies[b_idx].x < 0.0 || bunnies[b_idx].x > 1280.0 {
-                bunnies[b_idx].vx = -bunnies[b_idx].vx
+                let nvx = -bunnies[b_idx].vx
+                bunnies[b_idx].vx = nvx
             }
             if bunnies[b_idx].y > 720.0 {
                 bunnies[b_idx].y = 720.0
-                bunnies[b_idx].vy = -bunnies[b_idx].vy * 0.85
+                let bounced_vy = -bunnies[b_idx].vy * 0.85
+                bunnies[b_idx].vy = bounced_vy
             }
             b_idx += 1
         }

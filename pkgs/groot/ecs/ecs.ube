@@ -29,11 +29,13 @@ pub fn rigid_body(vx: f32, vy: f32, mass: f32, is_static: bool) -> RigidBody {
 // Entity snapshots are flat values: they can live in a `Pool[Entity]` without
 // any heap indirection.
 pub struct Entity {
-    pub id:        i32,
-    pub active:    bool,
-    pub transform: math::Transform,
-    pub sprite:    Sprite?,
-    pub body:      RigidBody?
+    pub id:             i32,
+    pub active:         bool,
+    pub transform:      math::Transform,
+    pub has_sprite:     bool,
+    pub sprite:         Sprite,
+    pub has_rigid_body: bool,
+    pub body:           RigidBody
 }
 
 pub struct World {
@@ -50,15 +52,17 @@ pub fn world_new(capacity: i32) -> World {
 
 pub fn (mut w World) create_entity(pos: math::Vec2) -> UbeHandle {
     let e = Entity{
-        id:        w.next_id,
-        active:    true,
-        transform: math::Transform{
+        id:             w.next_id,
+        active:         true,
+        transform:      math::Transform{
             position: move pos,
             rotation: 0.0,
             scale:    math::vec2(1.0, 1.0)
         },
-        sprite:    none,
-        body:      none
+        has_sprite:     false,
+        sprite:         Sprite{ size: math::vec2_zero(), color: color::clear() },
+        has_rigid_body: false,
+        body:           RigidBody{ velocity: math::vec2_zero(), mass: 0.0, is_static: true }
     }
     w.next_id += 1
     return w.entities.spawn(move e)
@@ -68,11 +72,13 @@ pub fn (mut w World) create_sprite_entity(
     x: f32, y: f32, sx: f32, sy: f32, c: color::Color
 ) -> UbeHandle {
     let e = Entity{
-        id:        w.next_id,
-        active:    true,
-        transform: math::transform_at(x, y),
-        sprite:    Sprite{ size: math::vec2(sx, sy), color: move c },
-        body:      none
+        id:             w.next_id,
+        active:         true,
+        transform:      math::transform_at(x, y),
+        has_sprite:     true,
+        sprite:         Sprite{ size: math::vec2(sx, sy), color: move c },
+        has_rigid_body: false,
+        body:           RigidBody{ velocity: math::vec2_zero(), mass: 0.0, is_static: true }
     }
     w.next_id += 1
     return w.entities.spawn(move e)

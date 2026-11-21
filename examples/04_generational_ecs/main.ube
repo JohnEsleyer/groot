@@ -39,18 +39,18 @@ fn main() {
 
             // Draw active entities
             if let e1 = world.get(h1) {
-                if let s = e1.sprite {
-                    game.draw_rect(e1.transform.position.x, e1.transform.position.y, s.size.x, s.size.y, s.color)
+                if e1.has_sprite {
+                    game.draw_rect(e1.transform.position.x, e1.transform.position.y, e1.sprite.size.x, e1.sprite.size.y, e1.sprite.color)
                 }
             }
             if let e2 = world.get(h2) {
-                if let s = e2.sprite {
-                    game.draw_rect(e2.transform.position.x, e2.transform.position.y, s.size.x, s.size.y, s.color)
+                if e2.has_sprite {
+                    game.draw_rect(e2.transform.position.x, e2.transform.position.y, e2.sprite.size.x, e2.sprite.size.y, e2.sprite.color)
                 }
             }
             if let e3 = world.get(h3) {
-                if let s = e3.sprite {
-                    game.draw_rect(e3.transform.position.x, e3.transform.position.y, s.size.x, s.size.y, s.color)
+                if e3.has_sprite {
+                    game.draw_rect(e3.transform.position.x, e3.transform.position.y, e3.sprite.size.x, e3.sprite.size.y, e3.sprite.color)
                 }
             }
 

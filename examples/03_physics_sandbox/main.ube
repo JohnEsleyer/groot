@@ -28,14 +28,29 @@ fn main() {
     while step < 120 {
         let mut i: i32 = 0
         while i < bodies.len {
-            bodies[i].x += bodies[i].vx * dt
-            bodies[i].y += bodies[i].vy * dt
+            let px = bodies[i].x
+            let py = bodies[i].y
+            let pvx = bodies[i].vx
+            let pvy = bodies[i].vy
 
-            if bodies[i].x < 20.0 || bodies[i].x > 780.0 {
-                bodies[i].vx = -bodies[i].vx
+            let mut nx = px + pvx * dt
+            let mut ny = py + pvy * dt
+            let mut nvx = pvx
+            let mut nvy = pvy
+
+            if nx < 20.0 || nx > 780.0 {
+                nvx = -pvx
             }
-            if bodies[i].y < 20.0 || bodies[i].y > 580.0 {
-                bodies[i].vy = -bodies[i].vy
+            if ny < 20.0 || ny > 580.0 {
+                nvy = -pvy
+            }
+
+            bodies[i] = Particle{
+                x: nx,
+                y: ny,
+                vx: nvx,
+                vy: nvy,
+                radius: 8.0
             }
             i += 1
         }
@@ -50,10 +65,24 @@ fn main() {
             let relative = (bodies[1].vx - bodies[0].vx) * n.x +
                            (bodies[1].vy - bodies[0].vy) * n.y
             if relative < 0.0 {
-                bodies[0].vx -= relative * n.x
-                bodies[0].vy -= relative * n.y
-                bodies[1].vx += relative * n.x
-                bodies[1].vy += relative * n.y
+                let b0vx = bodies[0].vx - relative * n.x
+                let b0vy = bodies[0].vy - relative * n.y
+                let b1vx = bodies[1].vx + relative * n.x
+                let b1vy = bodies[1].vy + relative * n.y
+                bodies[0] = Particle{
+                    x: bodies[0].x,
+                    y: bodies[0].y,
+                    vx: b0vx,
+                    vy: b0vy,
+                    radius: 8.0
+                }
+                bodies[1] = Particle{
+                    x: bodies[1].x,
+                    y: bodies[1].y,
+                    vx: b1vx,
+                    vy: b1vy,
+                    radius: 8.0
+                }
             }
         }
 

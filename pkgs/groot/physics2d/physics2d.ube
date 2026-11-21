@@ -84,29 +84,46 @@ pub fn overlaps(a: math::Rect, b: math::Rect) -> bool {
 pub fn raycast_aabb(
     ox: f32, oy: f32, dx: f32, dy: f32, view box: math::Rect
 ) -> f32 {
-    let inv_x = if dx != 0.0 { 1.0 / dx } else { 0.0 }
-    let inv_y = if dy != 0.0 { 1.0 / dy } else { 0.0 }
+    let mut tmin = -1000000.0
+    let mut tmax = 1000000.0
 
-    let mut t1 = (box.x - ox) * inv_x
-    let mut t2 = (box.x + box.w - ox) * inv_x
-    if t1 > t2 {
-        let tmp = t1
-        t1 = t2
-        t2 = tmp
+    if dx != 0.0 {
+        let inv_x = 1.0 / dx
+        let mut t1 = (box.x - ox) * inv_x
+        let mut t2 = (box.x + box.w - ox) * inv_x
+        if t1 > t2 {
+            let tmp = t1
+            t1 = t2
+            t2 = tmp
+        }
+        if t1 > tmin { tmin = t1 }
+        if t2 < tmax { tmax = t2 }
+        if tmin > tmax { return -1.0 }
+    } else {
+        if ox < box.x || ox > (box.x + box.w) {
+            return -1.0
+        }
     }
 
-    let mut t3 = (box.y - oy) * inv_y
-    let mut t4 = (box.y + box.h - oy) * inv_y
-    if t3 > t4 {
-        let tmp = t3
-        t3 = t4
-        t4 = tmp
+    if dy != 0.0 {
+        let inv_y = 1.0 / dy
+        let mut t3 = (box.y - oy) * inv_y
+        let mut t4 = (box.y + box.h - oy) * inv_y
+        if t3 > t4 {
+            let tmp = t3
+            t3 = t4
+            t4 = tmp
+        }
+        if t3 > tmin { tmin = t3 }
+        if t4 < tmax { tmax = t4 }
+        if tmin > tmax { return -1.0 }
+    } else {
+        if oy < box.y || oy > (box.y + box.h) {
+            return -1.0
+        }
     }
 
-    let tmin = if t1 > t3 { t1 } else { t3 }
-    let tmax = if t2 < t4 { t2 } else { t4 }
-
-    if tmax < 0.0 || tmin > tmax {
+    if tmax < 0.0 {
         return -1.0
     }
     if tmin < 0.0 {
@@ -126,7 +143,7 @@ pub fn resolve(
     if !m.has_collision {
         return math::vec2(ax, ay)
     }
-    ax += m.normal.x * m.depth
-    ay += m.normal.y * m.depth
+    ax -= m.normal.x * m.depth
+    ay -= m.normal.y * m.depth
     return math::vec2(ax, ay)
 }
