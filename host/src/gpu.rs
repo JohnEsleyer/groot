@@ -151,7 +151,7 @@ impl GpuRenderer {
             format,
             width,
             height,
-            present_mode: PresentMode::AutoVsync,
+            present_mode: PresentMode::Fifo,
             alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
@@ -778,6 +778,17 @@ impl GpuRenderer {
 
         let output = match surface.get_current_texture() {
             Ok(tex) => tex,
+            Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
+                // Immediately reconfigure the surface so rendering never hangs!
+                if let (Some(device), Some(config)) = (self.device.as_ref(), self.config.as_ref()) {
+                    surface.configure(device, config);
+                }
+                return;
+            }
+            Err(wgpu::SurfaceError::Timeout) => {
+                // Skip frame if timeout occurs, next frame will retry
+                return;
+            }
             Err(_) => return,
         };
         let view = output.texture.create_view(&TextureViewDescriptor::default());

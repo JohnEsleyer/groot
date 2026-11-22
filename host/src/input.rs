@@ -5,7 +5,7 @@
 //! future WIT `input` interface (or an exported guest tick) can drain it
 //! without changing the engine-side `InputManager` API.
 
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
@@ -19,7 +19,7 @@ pub struct RawInputEvent {
 
 #[derive(Default)]
 pub struct InputQueue {
-    events: Vec<RawInputEvent>,
+    events: VecDeque<RawInputEvent>,
     pub mouse_x: f32,
     pub mouse_y: f32,
     pub keys_down: HashSet<u32>,
@@ -48,11 +48,11 @@ impl InputQueue {
     pub fn push(&mut self, ev: RawInputEvent) {
         // Keep the queue bounded so a headless guest cannot grow host memory
         // without bound.
-        const MAX_QUEUED_EVENTS: usize = 4096;
+        const MAX_QUEUED_EVENTS: usize = 256;
         if self.events.len() >= MAX_QUEUED_EVENTS {
-            self.events.remove(0);
+            self.events.pop_front();
         }
-        self.events.push(ev);
+        self.events.push_back(ev);
     }
 
     pub fn set_mouse(&mut self, x: f32, y: f32) {
@@ -62,6 +62,6 @@ impl InputQueue {
 
     #[allow(dead_code)]
     pub fn drain(&mut self) -> Vec<RawInputEvent> {
-        std::mem::take(&mut self.events)
+        self.events.drain(..).collect()
     }
 }
