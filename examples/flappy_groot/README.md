@@ -18,7 +18,7 @@ A full port of the legacy Flappy Bird sample into pure, native Ube WebAssembly.
 ## How to Run
 
 ```bash
-# From _groot directory:
-ube build examples/flappy_groot/main.ube --target=wasi2 -o flappy.wasm
+# From the _groot directory (using the project ube compiler):
+../bin/ube build examples/flappy_groot/main.ube --target=wasi2 -o flappy.wasm
 cargo run --manifest-path host/Cargo.toml -- flappy.wasm
 ```

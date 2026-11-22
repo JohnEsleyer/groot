@@ -7,6 +7,7 @@
 
 use std::collections::HashSet;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub struct RawInputEvent {
     /// 0: KeyDown, 1: KeyUp, 2: MouseMove, 3: MouseDown, 4: MouseUp
@@ -59,6 +60,7 @@ impl InputQueue {
         self.mouse_y = y;
     }
 
+    #[allow(dead_code)]
     pub fn drain(&mut self) -> Vec<RawInputEvent> {
         std::mem::take(&mut self.events)
     }

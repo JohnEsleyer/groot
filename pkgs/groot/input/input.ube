@@ -63,6 +63,32 @@ pub fn key_left() -> i32 { return 37 }
 pub fn key_up() -> i32 { return 38 }
 pub fn key_right() -> i32 { return 39 }
 pub fn key_down() -> i32 { return 40 }
+pub fn key_a() -> i32 { return 65 }
+pub fn key_b() -> i32 { return 66 }
+pub fn key_c() -> i32 { return 67 }
+pub fn key_d() -> i32 { return 68 }
+pub fn key_e() -> i32 { return 69 }
+pub fn key_f() -> i32 { return 70 }
+pub fn key_g() -> i32 { return 71 }
+pub fn key_h() -> i32 { return 72 }
+pub fn key_i() -> i32 { return 73 }
+pub fn key_j() -> i32 { return 74 }
+pub fn key_k() -> i32 { return 75 }
+pub fn key_l() -> i32 { return 76 }
+pub fn key_m() -> i32 { return 77 }
+pub fn key_n() -> i32 { return 78 }
+pub fn key_o() -> i32 { return 79 }
+pub fn key_p() -> i32 { return 80 }
+pub fn key_q() -> i32 { return 81 }
+pub fn key_r() -> i32 { return 82 }
+pub fn key_s() -> i32 { return 83 }
+pub fn key_t() -> i32 { return 84 }
+pub fn key_u() -> i32 { return 85 }
+pub fn key_v() -> i32 { return 86 }
+pub fn key_w() -> i32 { return 87 }
+pub fn key_x() -> i32 { return 88 }
+pub fn key_y() -> i32 { return 89 }
+pub fn key_z() -> i32 { return 90 }
 
 // Alias and manager struct for higher-level loops
 pub struct InputManager {

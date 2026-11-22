@@ -16,7 +16,7 @@ Demonstrates continuous boundary reflection, dynamic sphere/box AABB intersectio
 ## How to Run
 
 ```bash
-# From _groot directory:
-ube build examples/03_physics_sandbox/main.ube --target=wasi2 -o physics.wasm
+# From the _groot directory (using the project ube compiler):
+../bin/ube build examples/03_physics_sandbox/main.ube --target=wasi2 -o physics.wasm
 cargo run --manifest-path host/Cargo.toml -- physics.wasm
 ```

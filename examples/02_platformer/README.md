@@ -18,7 +18,16 @@ A classic side-view platformer physics model incorporating gravity, horizontal a
 ## How to Run
 
 ```bash
-# From _groot directory:
-ube build examples/02_platformer/main.ube --target=wasi2 -o platformer.wasm
+# From the _groot directory (using the project ube compiler):
+../bin/ube build examples/02_platformer/main.ube --target=wasi2 -o platformer.wasm
 cargo run --manifest-path host/Cargo.toml -- platformer.wasm
 ```
+
+### Controls
+
+| Input | Action |
+| :--- | :--- |
+| `Space` / `Up` / `W` | Jump |
+| `Left` / `A` | Move Left |
+| `Right` / `D` | Move Right |
+| `Escape` | Exit |

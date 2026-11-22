@@ -313,7 +313,18 @@ impl GpuRenderer {
                 unclipped_depth: false,
                 conservative: false,
             },
-            depth_stencil: None,
+            // The combined render pass always has a Depth32Float attachment (created
+            // in `create_depth_texture`).  Every pipeline bound inside that pass must
+            // declare a matching depth-stencil format, even if it doesn't write depth.
+            // Without this the wgpu validation layer panics with
+            // "Render pipeline targets are incompatible with render pass".
+            depth_stencil: Some(DepthStencilState {
+                format: TextureFormat::Depth32Float,
+                depth_write_enabled: false,
+                depth_compare: CompareFunction::Always,
+                stencil: StencilState::default(),
+                bias: DepthBiasState::default(),
+            }),
             multisample: MultisampleState::default(),
             multiview: None,
         });

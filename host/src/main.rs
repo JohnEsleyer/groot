@@ -14,6 +14,7 @@ use window::WindowManager;
 use winit::event::{ElementState, Event, MouseButton, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::platform::pump_events::{EventLoopExtPumpEvents, PumpStatus};
 
 // Generate component bindings from the WIT contracts in `wit/`.
 wasmtime::component::bindgen!({
@@ -30,6 +31,85 @@ struct HostState {
     event_loop: Arc<SendEventLoop>,
     frame_interval: Duration,
     next_frame: Option<Instant>,
+    close_requested: bool,
+}
+
+impl HostState {
+    fn pump_window_events(&mut self) -> bool {
+        let mut guard = self.event_loop.0.lock().unwrap();
+        let Some(el) = guard.as_mut() else { return true; };
+        let mut close_req = false;
+        let mut resize_to: Option<(u32, u32)> = None;
+
+        let status = el.pump_events(Some(Duration::ZERO), |event, target| {
+            match event {
+                Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+                    close_req = true;
+                    target.exit();
+                }
+                Event::WindowEvent { event: WindowEvent::Resized(size), .. } => {
+                    resize_to = Some((size.width, size.height));
+                }
+                Event::WindowEvent { event: WindowEvent::CursorMoved { position, .. }, .. } => {
+                    let mut q = self.inputs.lock().unwrap();
+                    q.set_mouse(position.x as f32, position.y as f32);
+                    q.push(RawInputEvent {
+                        event_type: 2,
+                        key_code: 0,
+                        mouse_x: position.x as f32,
+                        mouse_y: position.y as f32,
+                    });
+                }
+                Event::WindowEvent { event: WindowEvent::MouseInput { state, button, .. }, .. } => {
+                    let kind = if state == ElementState::Pressed { 3 } else { 4 };
+                    let is_pressed = state == ElementState::Pressed;
+                    let code = match button {
+                        MouseButton::Left => 1,
+                        MouseButton::Right => 2,
+                        MouseButton::Middle => 3,
+                        _ => 0,
+                    };
+                    let mut q = self.inputs.lock().unwrap();
+                    q.on_mouse_button(code, is_pressed);
+                    let (mx, my) = (q.mouse_x, q.mouse_y);
+                    q.push(RawInputEvent {
+                        event_type: kind,
+                        key_code: code,
+                        mouse_x: mx,
+                        mouse_y: my,
+                    });
+                }
+                Event::WindowEvent { event: WindowEvent::KeyboardInput { event, .. }, .. } => {
+                    let kind = if event.state == ElementState::Pressed { 0 } else { 1 };
+                    let is_pressed = event.state == ElementState::Pressed;
+                    let code = match event.physical_key {
+                        PhysicalKey::Code(code) => key_code_to_u32(code),
+                        _ => 0,
+                    };
+                    let mut q = self.inputs.lock().unwrap();
+                    q.on_key(code, is_pressed);
+                    let (mx, my) = (q.mouse_x, q.mouse_y);
+                    q.push(RawInputEvent {
+                        event_type: kind,
+                        key_code: code,
+                        mouse_x: mx,
+                        mouse_y: my,
+                    });
+                }
+                _ => (),
+            }
+        });
+
+        if let Some((w, h)) = resize_to {
+            self.gpu.resize(w, h);
+        }
+        if close_req || matches!(status, PumpStatus::Exit(_)) {
+            self.close_requested = true;
+            false
+        } else {
+            true
+        }
+    }
 }
 
 impl WasiView for HostState {
@@ -90,6 +170,8 @@ impl ube::graphics::gpu::Host for HostState {
     }
 
     fn draw_frame(&mut self, r: f64, g: f64, b: f64) {
+        let _ = self.pump_window_events();
+
         let now = Instant::now();
         if let Some(target) = self.next_frame {
             if target > now {
@@ -124,6 +206,8 @@ impl ube::graphics::gpu3d::Host for HostState {
     }
 
     fn draw_frame(&mut self, clear_r: f64, clear_g: f64, clear_b: f64) {
+        let _ = self.pump_window_events();
+
         let now = Instant::now();
         if let Some(target) = self.next_frame {
             if target > now {
@@ -191,6 +275,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             event_loop: Arc::clone(&event_loop_cell),
             frame_interval,
             next_frame: None,
+            close_requested: false,
         },
     );
 

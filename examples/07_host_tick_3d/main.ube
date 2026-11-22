@@ -13,7 +13,7 @@ export fn init() {
 export fn tick(dt: f32) -> bool {
     let cube_mesh = platform3d::load_cube_mesh()
     let mut cam = render3d::Camera3D{
-        position: math::vec3(0.0, 10.0, 25.0),
+        position: math::vec3(0.0, 18.0, 36.0),
         target: math::vec3(0.0, 0.0, 0.0),
         up: math::vec3(0.0, 1.0, 0.0),
         fov_y: 0.785398,

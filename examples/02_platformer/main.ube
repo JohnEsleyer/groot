@@ -36,21 +36,45 @@ fn main() {
     let dt = 0.016
 
     let mut frame: i32 = 0
-    arena while frame < 180 {
+    arena while frame < 600 {
         controls.begin_frame()
+        controls.update_from_host()
 
-        if frame == 20 {
-            controls.feed_event(0, input::key_space(), 0.0, 0.0)
-        }
-        if controls.is_key_pressed(input::key_space()) && player.grounded {
-            player.vy = -400.0
+        // Real-time keyboard input: Space / Up / W to Jump
+        let wants_jump = controls.is_key_pressed(input::key_space()) ||
+                         controls.is_key_pressed(input::key_up()) ||
+                         controls.is_key_pressed(input::key_w())
+        if wants_jump && player.grounded {
+            player.vy = -450.0
             player.grounded = false
+        }
+
+        // Horizontal movement: Left/A and Right/D
+        player.vx = 0.0
+        if controls.is_key_down(input::key_left()) || controls.is_key_down(input::key_a()) {
+            player.vx -= 240.0
+        }
+        if controls.is_key_down(input::key_right()) || controls.is_key_down(input::key_d()) {
+            player.vx += 240.0
+        }
+
+        // Allow ESC to exit early
+        if controls.is_key_pressed(input::key_escape()) {
+            break
         }
 
         // Gravity.
         player.vy += 980.0 * dt
         player.x += player.vx * dt
         player.y += player.vy * dt
+
+        // Keep player in bounds horizontally
+        if player.x < 0.0 {
+            player.x = 0.0
+        }
+        if player.x > 776.0 {
+            player.x = 776.0
+        }
 
         // Ground collision.
         let player_rect = math::rect(player.x, player.y, 24.0, 40.0)
@@ -78,12 +102,10 @@ fn main() {
         batch.draw_rect_struct(math::rect(obstacle_x, obstacle_y, 60.0, 60.0), color::red())
         batch.draw_rect_rgba(player.x, player.y, 24.0, 40.0, 0.2, 0.5, 1.0, 1.0)
 
-        if frame == 179 {
-            platform::submit(batch.vertices)
-            platform::present(0.08, 0.08, 0.12)
-            println(f"Platformer finished at frame {frame} (grounded={player.grounded}).")
-        }
+        platform::submit(batch.vertices)
+        platform::present(0.08, 0.08, 0.12)
 
         frame += 1
     }
+    println(f"Platformer finished at frame {frame} (grounded={player.grounded}).")
 }

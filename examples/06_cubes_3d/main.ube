@@ -18,8 +18,8 @@ fn main() {
     let plane_mesh = platform3d::load_plane_mesh(60.0)
 
     let mut cam = render3d::Camera3D{
-        position: math::vec3(0.0, 15.0, 30.0),
-        target:   math::vec3(0.0, 0.0, -10.0),
+        position: math::vec3(0.0, 30.0, 55.0),
+        target:   math::vec3(0.0, 0.0, -12.0),
         up:       math::vec3(0.0, 1.0, 0.0),
         fov_y:    0.785398, // 45 deg
         aspect:   1280.0 / 720.0,
@@ -30,12 +30,12 @@ fn main() {
     let mut angle: f32 = 0.0
     let mut frame = 0
 
-    while game.is_running && frame < 300 {
-        angle += 0.02
+    while game.is_running && frame < 600 {
+        angle += 0.015
 
-        // Orbit camera around center
-        cam.position.x = math::sin(angle) * 35.0
-        cam.position.z = math::cos(angle) * 35.0 - 10.0
+        // Orbit camera around center at a comfortable panoramic distance
+        cam.position.x = math::sin(angle) * 55.0
+        cam.position.z = math::cos(angle) * 55.0 - 12.0
 
         // Transient frame setup allocated in regional scratch arena
         arena {

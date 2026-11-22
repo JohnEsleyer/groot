@@ -19,7 +19,7 @@ Demonstrates safe entity lifecycles, slot reuse, and stale reference prevention 
 ## How to Run
 
 ```bash
-# From _groot directory:
-ube build examples/04_generational_ecs/main.ube --target=wasi2 -o ecs.wasm
+# From the _groot directory (using the project ube compiler):
+../bin/ube build examples/04_generational_ecs/main.ube --target=wasi2 -o ecs.wasm
 cargo run --manifest-path host/Cargo.toml -- ecs.wasm
 ```
