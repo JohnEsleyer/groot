@@ -176,7 +176,7 @@ pub fn mat4_ortho(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: 
 }
 
 pub fn mat4_mul(a: Mat4, b: Mat4) -> Mat4 {
-    let mut out = Mat4{ m: [16]f32{} }
+    let mut out = Mat4{ m: [16]f32{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0} }
     let mut col = 0
     while col < 4 {
         let mut row = 0
@@ -225,4 +225,222 @@ pub fn transform_at(x: f32, y: f32) -> Transform {
         rotation: 0.0,
         scale: Vec2{ x: 1.0, y: 1.0 }
     }
+}
+
+pub fn (v Vec3) normalized() -> Vec3 {
+    let l = v.len()
+    if l > 0.00001 {
+        return Vec3{ x: v.x / l, y: v.y / l, z: v.z / l }
+    }
+    return vec3_zero()
+}
+
+pub fn (v Vec3) cross(other: Vec3) -> Vec3 {
+    return Vec3{
+        x: v.y * other.z - v.z * other.y,
+        y: v.z * other.x - v.x * other.z,
+        z: v.x * other.y - v.y * other.x
+    }
+}
+
+pub fn sin(x: f32) -> f32 {
+    let pi: f32 = 3.141592653589793
+    let two_pi: f32 = 6.283185307179586
+    let mut rad = x
+    while rad > pi {
+        rad -= two_pi
+    }
+    while rad < -pi {
+        rad += two_pi
+    }
+    let x2 = rad * rad
+    let x3 = rad * x2
+    let x5 = x3 * x2
+    let x7 = x5 * x2
+    return rad - (x3 / 6.0) + (x5 / 120.0) - (x7 / 5040.0)
+}
+
+pub fn cos(x: f32) -> f32 {
+    return sin(1.57079632679 - x)
+}
+
+pub fn tan(x: f32) -> f32 {
+    let c = cos(x)
+    if c == 0.0 {
+        return 0.0
+    }
+    return sin(x) / c
+}
+
+// Perspective projection matching WebGPU clip space [0, 1]
+pub fn mat4_perspective(fov_rad: f32, aspect: f32, near: f32, far: f32) -> Mat4 {
+    let f = 1.0 / tan(fov_rad * 0.5)
+    let range = far - near
+    return Mat4{
+        m: [16]f32{
+            f / aspect, 0.0, 0.0,                        0.0,
+            0.0,        f,   0.0,                        0.0,
+            0.0,        0.0, -far / range,              -1.0,
+            0.0,        0.0, -(far * near) / range,      0.0
+        }
+    }
+}
+
+pub fn mat4_look_at(eye: Vec3, target: Vec3, up: Vec3) -> Mat4 {
+    let f = target.sub(eye).normalized()
+    let s = f.cross(up).normalized()
+    let u = s.cross(f)
+
+    return Mat4{
+        m: [16]f32{
+            s.x,           u.x,          -f.x,          0.0,
+            s.y,           u.y,          -f.y,          0.0,
+            s.z,           u.z,          -f.z,          0.0,
+            -s.dot(eye),   -u.dot(eye),   f.dot(eye),   1.0
+        }
+    }
+}
+
+pub fn mat4_translate(x: f32, y: f32, z: f32) -> Mat4 {
+    return Mat4{
+        m: [16]f32{
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            x,   y,   z,   1.0
+        }
+    }
+}
+
+pub fn mat4_scale(sx: f32, sy: f32, sz: f32) -> Mat4 {
+    return Mat4{
+        m: [16]f32{
+            sx,  0.0, 0.0, 0.0,
+            0.0, sy,  0.0, 0.0,
+            0.0, 0.0, sz,  0.0,
+            0.0, 0.0, 0.0, 1.0
+        }
+    }
+}
+
+pub struct Quat {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32
+}
+
+pub fn quat_identity() -> Quat {
+    return Quat{ x: 0.0, y: 0.0, z: 0.0, w: 1.0 }
+}
+
+pub fn quat(x: f32, y: f32, z: f32, w: f32) -> Quat {
+    return Quat{ x: x, y: y, z: z, w: w }
+}
+
+pub fn quat_from_axis_angle(axis: Vec3, angle_rad: f32) -> Quat {
+    let half = angle_rad * 0.5
+    let s = sin(half)
+    let a = axis.normalized()
+    return Quat{
+        x: a.x * s,
+        y: a.y * s,
+        z: a.z * s,
+        w: cos(half)
+    }
+}
+
+pub fn (q Quat) to_mat4() -> Mat4 {
+    let x2 = q.x + q.x
+    let y2 = q.y + q.y
+    let z2 = q.z + q.z
+    let xx = q.x * x2
+    let xy = q.x * y2
+    let xz = q.x * z2
+    let yy = q.y * y2
+    let yz = q.y * z2
+    let zz = q.z * z2
+    let wx = q.w * x2
+    let wy = q.w * y2
+    let wz = q.w * z2
+
+    return Mat4{
+        m: [16]f32{
+            1.0 - (yy + zz), xy + wz,         xz - wy,         0.0,
+            xy - wz,         1.0 - (xx + zz), yz + wx,         0.0,
+            xz + wy,         yz - wx,         1.0 - (xx + yy), 0.0,
+            0.0,             0.0,             0.0,             1.0
+        }
+    }
+}
+
+pub struct Plane {
+    pub normal: Vec3,
+    pub d: f32
+}
+
+pub struct Frustum {
+    pub planes: [6]Plane
+}
+
+pub fn frustum_from_matrix(m: Mat4) -> Frustum {
+    let row0 = Vec3{ x: m.m[0], y: m.m[4], z: m.m[8] }
+    let w0 = m.m[12]
+    let row1 = Vec3{ x: m.m[1], y: m.m[5], z: m.m[9] }
+    let w1 = m.m[13]
+    let row2 = Vec3{ x: m.m[2], y: m.m[6], z: m.m[10] }
+    let w2 = m.m[14]
+    let row3 = Vec3{ x: m.m[3], y: m.m[7], z: m.m[11] }
+    let w3 = m.m[15]
+
+    let left_n = row3.add(row0)
+    let left_d = w3 + w0
+    let right_n = row3.sub(row0)
+    let right_d = w3 - w0
+
+    let bottom_n = row3.add(row1)
+    let bottom_d = w3 + w1
+    let top_n = row3.sub(row1)
+    let top_d = w3 - w1
+
+    let near_n = Vec3{ x: row2.x, y: row2.y, z: row2.z }
+    let near_d = w2
+    let far_n = row3.sub(row2)
+    let far_d = w3 - w2
+
+    return Frustum{
+        planes: [6]Plane{
+            Plane{ normal: left_n.normalized(), d: left_d },
+            Plane{ normal: right_n.normalized(), d: right_d },
+            Plane{ normal: bottom_n.normalized(), d: bottom_d },
+            Plane{ normal: top_n.normalized(), d: top_d },
+            Plane{ normal: near_n.normalized(), d: near_d },
+            Plane{ normal: far_n.normalized(), d: far_d }
+        }
+    }
+}
+
+pub struct AABB3D {
+    pub min: Vec3,
+    pub max: Vec3
+}
+
+pub fn aabb3d(min: Vec3, max: Vec3) -> AABB3D {
+    return AABB3D{ min: move min, max: move max }
+}
+
+pub fn (f Frustum) intersects_aabb(box: AABB3D) -> bool {
+    let mut i = 0
+    while i < 6 {
+        let p = f.planes[i]
+        let px = if p.normal.x > 0.0 { box.max.x } else { box.min.x }
+        let py = if p.normal.y > 0.0 { box.max.y } else { box.min.y }
+        let pz = if p.normal.z > 0.0 { box.max.z } else { box.min.z }
+        let dist = p.normal.x * px + p.normal.y * py + p.normal.z * pz + p.d
+        if dist < 0.0 {
+            return false
+        }
+        i += 1
+    }
+    return true
 }

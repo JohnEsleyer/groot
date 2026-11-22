@@ -21,6 +21,11 @@ extern "ube:graphics/gpu@0.2.0" fn "set-vertices" host_gpu_set_vertices(
 
 extern "ube:graphics/gpu@0.2.0" fn "draw-frame" host_gpu_draw(r: f64, g: f64, b: f64)
 
+extern "ube:graphics/input@0.2.0" fn "is-key-down" host_is_key_down(code: i32) -> bool
+extern "ube:graphics/input@0.2.0" fn "is-mouse-down" host_is_mouse_down(button: i32) -> bool
+extern "ube:graphics/input@0.2.0" fn "mouse-x" host_mouse_x() -> f32
+extern "ube:graphics/input@0.2.0" fn "mouse-y" host_mouse_y() -> f32
+
 pub struct WindowConfig {
     pub width: i32,
     pub height: i32,
@@ -47,4 +52,20 @@ pub fn submit(view vertices: []f32) {
 /// Present one frame with the given clear color.
 pub fn present(r: f64, g: f64, b: f64) {
     host_gpu_draw(r, g, b)
+}
+
+pub fn is_key_down(code: i32) -> bool {
+    return host_is_key_down(code)
+}
+
+pub fn is_mouse_down(button: i32) -> bool {
+    return host_is_mouse_down(button)
+}
+
+pub fn mouse_x() -> f32 {
+    return host_mouse_x()
+}
+
+pub fn mouse_y() -> f32 {
+    return host_mouse_y()
 }

@@ -1,5 +1,10 @@
 package input
 
+extern "ube:graphics/input@0.2.0" fn "is-key-down" host_input_is_key_down(code: i32) -> bool
+extern "ube:graphics/input@0.2.0" fn "is-mouse-down" host_input_is_mouse_down(button: i32) -> bool
+extern "ube:graphics/input@0.2.0" fn "mouse-x" host_input_mouse_x() -> f32
+extern "ube:graphics/input@0.2.0" fn "mouse-y" host_input_mouse_y() -> f32
+
 pub struct InputState {
     pub key_down_states: [256]bool,
     pub mouse_down_states: [4]bool,
@@ -106,4 +111,20 @@ pub fn (view m InputManager) is_key_pressed(code: i32) -> bool {
         return m.state.key_down_states[code] && !m.prev_key_down_states[code]
     }
     return false
+}
+
+pub fn (mut m InputManager) update_from_host() {
+    let mut i = 0
+    while i < 256 {
+        let is_down = host_input_is_key_down(i)
+        m.state.on_key_event(i, is_down)
+        i += 1
+    }
+    let mut btn = 0
+    while btn < 4 {
+        let is_m_down = host_input_is_mouse_down(btn)
+        m.state.on_mouse_event(btn, is_m_down)
+        btn += 1
+    }
+    m.state.on_mouse_move(host_input_mouse_x(), host_input_mouse_y())
 }

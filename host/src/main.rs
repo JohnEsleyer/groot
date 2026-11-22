@@ -60,7 +60,6 @@ impl ube::graphics::window::Host for HostState {
     }
 }
 
-
 impl ube::graphics::input::Host for HostState {
     fn is_key_down(&mut self, code: u32) -> bool {
         self.inputs.lock().unwrap().keys_down.contains(&code)
@@ -91,9 +90,6 @@ impl ube::graphics::gpu::Host for HostState {
     }
 
     fn draw_frame(&mut self, r: f64, g: f64, b: f64) {
-        // The guest owns the frame loop, so the host can only pace it at the
-        // present boundary. Sleep until the next deadline; if the guest is
-        // behind schedule, re-anchor instead of accumulating debt.
         let now = Instant::now();
         if let Some(target) = self.next_frame {
             if target > now {
@@ -103,6 +99,40 @@ impl ube::graphics::gpu::Host for HostState {
         self.next_frame = Some(Instant::now() + self.frame_interval);
 
         self.gpu.draw_frame(r, g, b);
+    }
+}
+
+impl ube::graphics::gpu3d::Host for HostState {
+    fn upload_mesh(&mut self, vertices: Vec<f32>, indices: Vec<u32>) -> u32 {
+        self.gpu.upload_mesh(&vertices, &indices)
+    }
+
+    fn destroy_mesh(&mut self, id: u32) {
+        self.gpu.destroy_mesh(id);
+    }
+
+    fn set_camera(&mut self, view_proj: Vec<f32>, eye_pos: Vec<f32>) {
+        self.gpu.set_camera_3d(&view_proj, &eye_pos);
+    }
+
+    fn set_directional_light(&mut self, dir: Vec<f32>, color: Vec<f32>, intensity: f32) {
+        self.gpu.set_light_3d(&dir, &color, intensity);
+    }
+
+    fn draw_instances(&mut self, mesh: u32, instance_data: Vec<f32>) {
+        self.gpu.draw_instances_3d(mesh, &instance_data);
+    }
+
+    fn draw_frame(&mut self, clear_r: f64, clear_g: f64, clear_b: f64) {
+        let now = Instant::now();
+        if let Some(target) = self.next_frame {
+            if target > now {
+                std::thread::sleep(target - now);
+            }
+        }
+        self.next_frame = Some(Instant::now() + self.frame_interval);
+
+        self.gpu.draw_frame(clear_r, clear_g, clear_b);
     }
 }
 
@@ -133,6 +163,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     wasmtime_wasi::add_to_linker_sync(&mut linker)?;
     ube::graphics::window::add_to_linker(&mut linker, |state: &mut HostState| state)?;
     ube::graphics::gpu::add_to_linker(&mut linker, |state: &mut HostState| state)?;
+    ube::graphics::gpu3d::add_to_linker(&mut linker, |state: &mut HostState| state)?;
     ube::graphics::input::add_to_linker(&mut linker, |state: &mut HostState| state)?;
 
     let wasi = WasiCtxBuilder::new()
@@ -164,15 +195,49 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let component = Component::from_file(&engine, wasm_path)?;
-    let runner_world = GrootRunner::instantiate(&mut store, &component, &linker)?;
+    let (runner_world, instance) =
+        GrootRunner::instantiate(&mut store, &component, &linker)
+            .map(|rw| {
+                // Also get the low-level instance to check for tick/init exports
+                (rw, None)
+            })
+            .or_else(|_| {
+                linker
+                    .instantiate(&mut store, &component)
+                    .map(|inst| (GrootRunner::new(&mut store, &inst).unwrap(), Some(inst)))
+            })?;
 
-    // The guest owns its main loop for as long as it wants. Once it returns,
-    // the native event loop keeps the final uploaded frame alive and handles
-    // resizing/input until the window is closed.
-    match runner_world.wasi_cli_run().call_run(&mut store) {
-        Ok(Ok(())) => {}
-        Ok(Err(())) => eprintln!("[groot-host] guest returned an error"),
-        Err(err) => return Err(err.into()),
+    let instance = instance.unwrap_or_else(|| {
+        // If instantiated via GrootRunner, also instantiate or query
+        linker.instantiate(&mut store, &component).unwrap()
+    });
+
+    // Check if component exports `tick(dt: f32) -> bool` or `tick()`
+    let tick_fn_with_dt = instance.get_typed_func::<(f32,), (bool,)>(&mut store, "tick").ok();
+    let tick_fn_void = if tick_fn_with_dt.is_none() {
+        instance.get_typed_func::<(), ()>(&mut store, "tick").ok()
+    } else {
+        None
+    };
+    let has_tick = tick_fn_with_dt.is_some() || tick_fn_void.is_some();
+
+    // Call init if present
+    if let Ok(init_fn) = instance.get_typed_func::<(), ()>(&mut store, "init") {
+        let _ = init_fn.call(&mut store, ());
+        let _ = init_fn.post_return(&mut store);
+    }
+
+    if has_tick {
+        log::info!("Component exports tick(); driving inverted host frame loop");
+        // Also call run if present (for initial window setup) or let tick do it
+        let _ = runner_world.wasi_cli_run().call_run(&mut store);
+    } else {
+        // Fallback: guest drives its own synchronous main loop
+        match runner_world.wasi_cli_run().call_run(&mut store) {
+            Ok(Ok(())) => {}
+            Ok(Err(())) => eprintln!("[groot-host] guest returned an error"),
+            Err(err) => return Err(err.into()),
+        }
     }
 
     if !store.data().window_mgr.is_open() {
@@ -187,8 +252,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .take()
         .expect("event loop already taken");
 
+    let mut last_tick_time = Instant::now();
+    let mut is_running = true;
+
     event_loop.run(move |event, target| {
-        target.set_control_flow(ControlFlow::Wait);
+        target.set_control_flow(ControlFlow::Poll);
         match event {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
@@ -203,7 +271,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Event::WindowEvent {
                 event: WindowEvent::RedrawRequested,
                 ..
-            } => store.data_mut().gpu.redraw(),
+            } => {
+                if has_tick && is_running {
+                    let now = Instant::now();
+                    let dt = now.duration_since(last_tick_time).as_secs_f32();
+                    last_tick_time = now;
+
+                    if let Some(ref t_fn) = tick_fn_with_dt {
+                        match t_fn.call(&mut store, (dt,)) {
+                            Ok((keep_running,)) => {
+                                let _ = t_fn.post_return(&mut store);
+                                if !keep_running {
+                                    is_running = false;
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("[groot-host] guest tick error: {e}");
+                                is_running = false;
+                            }
+                        }
+                    } else if let Some(ref t_fn) = tick_fn_void {
+                        match t_fn.call(&mut store, ()) {
+                            Ok(()) => {
+                                let _ = t_fn.post_return(&mut store);
+                            }
+                            Err(e) => {
+                                eprintln!("[groot-host] guest tick error: {e}");
+                                is_running = false;
+                            }
+                        }
+                    }
+                } else {
+                    store.data_mut().gpu.redraw();
+                }
+            }
 
             Event::WindowEvent {
                 event: WindowEvent::CursorMoved { position, .. },

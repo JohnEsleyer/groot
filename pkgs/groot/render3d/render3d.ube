@@ -1,0 +1,41 @@
+package render3d
+
+import "../math" as math
+
+pub struct Camera3D {
+    pub position: math::Vec3,
+    pub target:   math::Vec3,
+    pub up:       math::Vec3,
+    pub fov_y:    f32,
+    pub aspect:   f32,
+    pub near:     f32,
+    pub far:      f32
+}
+
+pub fn camera3d_new(pos: math::Vec3, target: math::Vec3, aspect: f32) -> Camera3D {
+    return Camera3D{
+        position: move pos,
+        target:   move target,
+        up:       math::vec3(0.0, 1.0, 0.0),
+        fov_y:    0.785398, // 45 deg in rad
+        aspect:   aspect,
+        near:     0.1,
+        far:      1000.0
+    }
+}
+
+pub fn (c Camera3D) view_matrix() -> math::Mat4 {
+    return math::mat4_look_at(c.position, c.target, c.up)
+}
+
+pub fn (c Camera3D) projection_matrix() -> math::Mat4 {
+    return math::mat4_perspective(c.fov_y, c.aspect, c.near, c.far)
+}
+
+pub fn (c Camera3D) view_projection() -> math::Mat4 {
+    return math::mat4_mul(c.projection_matrix(), c.view_matrix())
+}
+
+pub fn (c Camera3D) frustum() -> math::Frustum {
+    return math::frustum_from_matrix(c.view_projection())
+}

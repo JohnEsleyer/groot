@@ -1,0 +1,149 @@
+package platform3d
+
+import "../math" as math
+import "../color" as color
+
+extern "ube:graphics/gpu3d@0.2.0" fn "upload-mesh" host_gpu3d_upload_mesh(
+    v_ptr: i32, v_len: i32,
+    i_ptr: i32, i_len: i32
+) -> i32
+
+extern "ube:graphics/gpu3d@0.2.0" fn "destroy-mesh" host_gpu3d_destroy_mesh(id: i32)
+
+extern "ube:graphics/gpu3d@0.2.0" fn "set-camera" host_gpu3d_set_camera(
+    vp_ptr: i32, vp_len: i32,
+    eye_ptr: i32, eye_len: i32
+)
+
+extern "ube:graphics/gpu3d@0.2.0" fn "set-directional-light" host_gpu3d_set_light(
+    dir_ptr: i32, dir_len: i32,
+    col_ptr: i32, col_len: i32,
+    intensity: f32
+)
+
+extern "ube:graphics/gpu3d@0.2.0" fn "draw-instances" host_gpu3d_draw_instances(
+    mesh_id: i32,
+    inst_ptr: i32, inst_len: i32
+)
+
+extern "ube:graphics/gpu3d@0.2.0" fn "draw-frame" host_gpu3d_draw_frame(
+    r: f64, g: f64, b: f64
+)
+
+pub fn upload_mesh(view vertices: []f32, view indices: []u32) -> i32 {
+    return host_gpu3d_upload_mesh(vertices.ptr, vertices.len, indices.ptr, indices.len)
+}
+
+pub fn destroy_mesh(id: i32) {
+    host_gpu3d_destroy_mesh(id)
+}
+
+pub fn set_camera(view view_proj: math::Mat4, eye: math::Vec3) {
+    let mut vp_slice = []f32{}
+    let mut i = 0
+    while i < 16 {
+        vp_slice.push(view_proj.at(i))
+        i += 1
+    }
+    let mut eye_slice = []f32{ eye.x, eye.y, eye.z }
+    host_gpu3d_set_camera(vp_slice.ptr, vp_slice.len, eye_slice.ptr, eye_slice.len)
+}
+
+pub fn set_directional_light(dir: math::Vec3, c: color::Color, intensity: f32) {
+    let mut dir_slice = []f32{ dir.x, dir.y, dir.z }
+    let mut col_slice = []f32{ c.r, c.g, c.b }
+    host_gpu3d_set_light(dir_slice.ptr, dir_slice.len, col_slice.ptr, col_slice.len, intensity)
+}
+
+pub fn set_sun_light(dir: math::Vec3, c: color::Color) {
+    set_directional_light(move dir, move c, 1.0)
+}
+
+pub fn draw_instances(mesh_id: i32, view transforms: []math::Mat4) {
+    let mut inst_floats = []f32{}
+    let mut t_idx = 0
+    while t_idx < transforms.len {
+        let mut m_idx = 0
+        while m_idx < 16 {
+            inst_floats.push(transforms[t_idx].at(m_idx))
+            m_idx += 1
+        }
+        t_idx += 1
+    }
+    host_gpu3d_draw_instances(mesh_id, inst_floats.ptr, inst_floats.len)
+}
+
+pub fn draw_instance_floats(mesh_id: i32, view instance_data: []f32) {
+    host_gpu3d_draw_instances(mesh_id, instance_data.ptr, instance_data.len)
+}
+
+pub fn present(r: f64, g: f64, b: f64) {
+    host_gpu3d_draw_frame(r, g, b)
+}
+
+// Built-in Primitives: Cube, Plane, Sphere
+
+pub fn load_cube_mesh() -> i32 {
+    let mut vertices = []f32{
+        // Front face (normal 0, 0, 1)
+        -0.5, -0.5,  0.5,  0.0,  0.0,  1.0,  0.0, 1.0,
+         0.5, -0.5,  0.5,  0.0,  0.0,  1.0,  1.0, 1.0,
+         0.5,  0.5,  0.5,  0.0,  0.0,  1.0,  1.0, 0.0,
+        -0.5,  0.5,  0.5,  0.0,  0.0,  1.0,  0.0, 0.0,
+
+        // Back face (normal 0, 0, -1)
+         0.5, -0.5, -0.5,  0.0,  0.0, -1.0,  0.0, 1.0,
+        -0.5, -0.5, -0.5,  0.0,  0.0, -1.0,  1.0, 1.0,
+        -0.5,  0.5, -0.5,  0.0,  0.0, -1.0,  1.0, 0.0,
+         0.5,  0.5, -0.5,  0.0,  0.0, -1.0,  0.0, 0.0,
+
+        // Top face (normal 0, 1, 0)
+        -0.5,  0.5,  0.5,  0.0,  1.0,  0.0,  0.0, 1.0,
+         0.5,  0.5,  0.5,  0.0,  1.0,  0.0,  1.0, 1.0,
+         0.5,  0.5, -0.5,  0.0,  1.0,  0.0,  1.0, 0.0,
+        -0.5,  0.5, -0.5,  0.0,  1.0,  0.0,  0.0, 0.0,
+
+        // Bottom face (normal 0, -1, 0)
+        -0.5, -0.5, -0.5,  0.0, -1.0,  0.0,  0.0, 1.0,
+         0.5, -0.5, -0.5,  0.0, -1.0,  0.0,  1.0, 1.0,
+         0.5, -0.5,  0.5,  0.0, -1.0,  0.0,  1.0, 0.0,
+        -0.5, -0.5,  0.5,  0.0, -1.0,  0.0,  0.0, 0.0,
+
+        // Right face (normal 1, 0, 0)
+         0.5, -0.5,  0.5,  1.0,  0.0,  0.0,  0.0, 1.0,
+         0.5, -0.5, -0.5,  1.0,  0.0,  0.0,  1.0, 1.0,
+         0.5,  0.5, -0.5,  1.0,  0.0,  0.0,  1.0, 0.0,
+         0.5,  0.5,  0.5,  1.0,  0.0,  0.0,  0.0, 0.0,
+
+        // Left face (normal -1, 0, 0)
+        -0.5, -0.5, -0.5, -1.0,  0.0,  0.0,  0.0, 1.0,
+        -0.5, -0.5,  0.5, -1.0,  0.0,  0.0,  1.0, 1.0,
+        -0.5,  0.5,  0.5, -1.0,  0.0,  0.0,  1.0, 0.0,
+        -0.5,  0.5, -0.5, -1.0,  0.0,  0.0,  0.0, 0.0
+    }
+
+    let mut indices = []u32{
+         0,  1,  2,   0,  2,  3,  // Front
+         4,  5,  6,   4,  6,  7,  // Back
+         8,  9, 10,   8, 10, 11,  // Top
+        12, 13, 14,  12, 14, 15,  // Bottom
+        16, 17, 18,  16, 18, 19,  // Right
+        20, 21, 22,  20, 22, 23   // Left
+    }
+
+    return upload_mesh(vertices, indices)
+}
+
+pub fn load_plane_mesh(size: f32) -> i32 {
+    let hs = size * 0.5
+    let mut vertices = []f32{
+        -hs, 0.0,  hs,  0.0, 1.0, 0.0,  0.0, 1.0,
+         hs, 0.0,  hs,  0.0, 1.0, 0.0,  1.0, 1.0,
+         hs, 0.0, -hs,  0.0, 1.0, 0.0,  1.0, 0.0,
+        -hs, 0.0, -hs,  0.0, 1.0, 0.0,  0.0, 0.0
+    }
+    let mut indices = []u32{
+        0, 1, 2,  0, 2, 3
+    }
+    return upload_mesh(vertices, indices)
+}

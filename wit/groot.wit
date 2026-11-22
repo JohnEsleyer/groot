@@ -10,6 +10,18 @@ interface gpu {
     draw-frame: func(r: f64, g: f64, b: f64);
 }
 
+interface gpu3d {
+    type mesh-id = u32;
+    upload-mesh: func(vertices: list<f32>, indices: list<u32>) -> mesh-id;
+    destroy-mesh: func(id: mesh-id);
+
+    set-camera: func(view-proj: list<f32>, eye-pos: list<f32>);
+    set-directional-light: func(dir: list<f32>, color: list<f32>, intensity: f32);
+
+    draw-instances: func(mesh: mesh-id, instance-data: list<f32>);
+    draw-frame: func(clear-r: f64, clear-g: f64, clear-b: f64);
+}
+
 interface input {
     is-key-down: func(code: u32) -> bool;
     is-mouse-down: func(button: u32) -> bool;
@@ -20,6 +32,7 @@ interface input {
 world groot-runner {
     import window;
     import gpu;
+    import gpu3d;
     import input;
     include wasi:cli/command@0.2.0;
 }

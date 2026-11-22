@@ -1,0 +1,51 @@
+package main
+
+import "../../pkgs/groot/app" as app
+import "../../pkgs/groot/math" as math
+import "../../pkgs/groot/render3d" as render3d
+import "../../pkgs/groot/platform3d" as platform3d
+import "../../pkgs/groot/color" as color
+
+export fn init() {
+    println("[guest] 3D world initialized")
+}
+
+export fn tick(dt: f32) -> bool {
+    let cube_mesh = platform3d::load_cube_mesh()
+    let mut cam = render3d::Camera3D{
+        position: math::vec3(0.0, 10.0, 25.0),
+        target: math::vec3(0.0, 0.0, 0.0),
+        up: math::vec3(0.0, 1.0, 0.0),
+        fov_y: 0.785398,
+        aspect: 1280.0 / 720.0,
+        near: 0.1,
+        far: 1000.0
+    }
+
+    arena {
+        platform3d::set_camera(cam.view_projection(), cam.position)
+        platform3d::set_sun_light(math::vec3(-0.5, -1.0, -0.3), color::white())
+
+        let mut instances = []math::Mat4{}
+        let mut i = 0
+        while i < 25 {
+            let x = ((i % 5) as f32) * 3.0 - 6.0
+            let z = ((i / 5) as f32) * 3.0 - 6.0
+            instances.push(math::mat4_translate(x, 0.0, z))
+            i += 1
+        }
+        platform3d::draw_instances(cube_mesh, instances)
+        platform3d::present(0.06, 0.06, 0.09)
+    }
+
+    return true
+}
+
+fn main() {
+    let mut game = app::app_new(app::EngineConfig{
+        width: 1280,
+        height: 720,
+        title: "Groot 3D - Host Driven Tick"
+    })
+    game.start()
+}

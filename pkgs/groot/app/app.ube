@@ -44,6 +44,7 @@ pub fn (mut app App) start() {
 pub fn (mut app App) begin_frame() {
     app.batcher.clear()
     app.input.begin_frame()
+    app.input.update_from_host()
 }
 
 pub fn (mut app App) tick(now_nanos: i64) {
