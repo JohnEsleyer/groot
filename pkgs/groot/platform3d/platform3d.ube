@@ -68,6 +68,44 @@ pub fn draw_instances(mesh_id: i32, view transforms: []math::Mat4) {
             inst_floats.push(transforms[t_idx].at(m_idx))
             m_idx += 1
         }
+        // Default white tint (1.0, 1.0, 1.0, 1.0)
+        inst_floats.push(1.0)
+        inst_floats.push(1.0)
+        inst_floats.push(1.0)
+        inst_floats.push(1.0)
+        t_idx += 1
+    }
+    host_gpu3d_draw_instances(mesh_id, inst_floats.ptr, inst_floats.len)
+}
+
+// Views are second-class, so a view-indexed element cannot be directly
+// unpacked field-by-field into a slice. Returning a copy-type fixed array
+// lets callers read the tint components without escaping the view.
+fn color_floats(view c: color::Color) -> [4]f32 {
+    return [4]f32{ c.r, c.g, c.b, c.a }
+}
+
+pub fn draw_instances_tinted(mesh_id: i32, view transforms: []math::Mat4, view tints: []color::Color) {
+    let mut inst_floats = []f32{}
+    let mut t_idx = 0
+    while t_idx < transforms.len {
+        let mut m_idx = 0
+        while m_idx < 16 {
+            inst_floats.push(transforms[t_idx].at(m_idx))
+            m_idx += 1
+        }
+        if t_idx < tints.len {
+            let tint = color_floats(tints[t_idx])
+            inst_floats.push(tint[0])
+            inst_floats.push(tint[1])
+            inst_floats.push(tint[2])
+            inst_floats.push(tint[3])
+        } else {
+            inst_floats.push(1.0)
+            inst_floats.push(1.0)
+            inst_floats.push(1.0)
+            inst_floats.push(1.0)
+        }
         t_idx += 1
     }
     host_gpu3d_draw_instances(mesh_id, inst_floats.ptr, inst_floats.len)

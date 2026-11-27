@@ -412,9 +412,9 @@ impl GpuRenderer {
                 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
                     let light_dir = normalize(-light.direction.xyz);
                     let diff = max(dot(in.world_normal, light_dir), 0.0);
-                    let ambient = 0.15;
-                    let final_light = ambient + diff * 0.85;
-                    return vec4<f32>(in.tint.rgb * final_light, in.tint.a);
+                    let ambient = 0.2;
+                    let final_light = in.tint.rgb * (ambient + diff * 0.8 * light.color.rgb);
+                    return vec4<f32>(final_light, in.tint.a);
                 }
             "#
                 .into(),
