@@ -6,6 +6,7 @@ import "../../pkgs/groot/app" as app
 import "../../pkgs/groot/render" as render
 import "../../pkgs/groot/math" as math
 import "../../pkgs/groot/color" as color
+import "../../pkgs/groot/input" as input
 
 fn main() {
     let mut game = app::app_new(app::EngineConfig{
@@ -19,17 +20,19 @@ fn main() {
     let target_world_pos = math::vec2(100.0, 50.0)
 
     let mut frame = 0
-    while game.is_running && frame < 120 {
-        // Camera pans and zooms smoothly
-        cam.position.x += 1.0
-        cam.zoom = 1.0 + (frame as f32) * 0.005
+    while game.is_running {
+        game.begin_frame()
+        if game.input.is_key_pressed(input::key_escape()) {
+            game.stop()
+        }
+
+        cam.position.x = math::sin((frame as f32) * 0.02) * 80.0
+        cam.zoom = 1.2 + math::sin((frame as f32) * 0.03) * 0.4
 
         // Transform world coordinate into screen coordinates
         let screen_pos = cam.world_to_screen(target_world_pos)
 
         arena {
-            game.begin_frame()
-
             // Draw target object at projected screen position
             let box_size = 40.0 * cam.zoom
             game.draw_rect(screen_pos.x, screen_pos.y, box_size, box_size, color::yellow())

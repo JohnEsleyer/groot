@@ -31,7 +31,7 @@ giving the host full control over timing, vsync, and frame rate.
 
 ```bash
 # From the _groot directory:
-../bin/ube build examples/07_host_tick_3d/main.ube --target=wasi2 -o host_tick3d.wasm
+ube build examples/07_host_tick_3d/main.ube --target=wasi2 -o host_tick3d.wasm
 cargo run --manifest-path host/Cargo.toml -- host_tick3d.wasm
 ```
 

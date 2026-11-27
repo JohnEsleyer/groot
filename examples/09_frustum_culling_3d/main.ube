@@ -1,0 +1,125 @@
+package main
+
+import "../../pkgs/groot/app" as app
+import "../../pkgs/groot/math" as math
+import "../../pkgs/groot/render3d" as render3d
+import "../../pkgs/groot/platform3d" as platform3d
+import "../../pkgs/groot/color" as color
+import "../../pkgs/groot/input" as input
+
+struct Pillar {
+    bounds: math::AABB3D,
+    model:  math::Mat4,
+    tint:   color::Color
+}
+
+fn main() {
+    let mut game = app::app_new(app::EngineConfig{
+        width: 1280,
+        height: 720,
+        title: "Groot 3D - Dynamic Frustum Culling"
+    })
+    game.start()
+
+    let cube_mesh = platform3d::load_cube_mesh()
+    let ground_mesh = platform3d::load_plane_mesh(120.0)
+
+    // Generate a 20x20 grid of pillars (400 entities total)
+    let mut pillars = []Pillar{}
+    let mut z_i = 0
+    while z_i < 20 {
+        let mut x_i = 0
+        while x_i < 20 {
+            let px = ((x_i as f32) - 10.0) * 5.0
+            let pz = ((z_i as f32) - 10.0) * 5.0
+            let height = 2.0 + (((x_i * 3 + z_i * 7) % 9) as f32) * 1.5
+            let py = height * 0.5
+
+            let box_min = math::vec3(px - 1.0, 0.0, pz - 1.0)
+            let box_max = math::vec3(px + 1.0, height, pz + 1.0)
+
+            let transform = math::mat4_mul(
+                math::mat4_translate(px, py, pz),
+                math::mat4_scale(2.0, height, 2.0)
+            )
+
+            let r = 0.3 + ((x_i as f32) / 20.0) * 0.6
+            let g = 0.3 + ((z_i as f32) / 20.0) * 0.5
+            let b = 0.8 - ((x_i as f32) / 20.0) * 0.4
+
+            pillars.push(Pillar{
+                bounds: math::aabb3d(move box_min, move box_max),
+                model:  move transform,
+                tint:   color::rgba(r, g, b, 1.0)
+            })
+            x_i += 1
+        }
+        z_i += 1
+    }
+
+    let mut cam = render3d::Camera3D{
+        position: math::vec3(0.0, 18.0, 45.0),
+        target:   math::vec3(0.0, 0.0, 0.0),
+        up:       math::vec3(0.0, 1.0, 0.0),
+        fov_y:    0.698132, // 40 degrees narrow FOV highlights culling clearly
+        aspect:   1280.0 / 720.0,
+        near:     0.1,
+        far:      150.0
+    }
+
+    let mut angle: f32 = 0.0
+    let mut frame = 0
+
+    while game.is_running {
+        game.begin_frame()
+        if game.input.is_key_pressed(input::key_escape()) {
+            game.stop()
+        }
+
+        angle += 0.015
+
+        // Fly camera in a sweeping circle around the pillars
+        cam.position.x = math::sin(angle) * 55.0
+        cam.position.z = math::cos(angle) * 55.0
+        cam.position.y = 12.0 + math::sin(angle * 2.0) * 6.0
+        cam.target.y = math::sin(angle * 1.5) * 4.0
+
+        arena {
+            let vp = cam.view_projection()
+            let frustum = cam.frustum()
+
+            platform3d::set_camera(vp, cam.position)
+            platform3d::set_sun_light(math::vec3(-0.6, -1.0, -0.3), color::white())
+
+            // Draw ground plane
+            let mut ground_inst = []math::Mat4{}
+            ground_inst.push(math::mat4_translate(0.0, 0.0, 0.0))
+            platform3d::draw_instances(ground_mesh, ground_inst)
+
+            // Cull pillars against camera frustum planes
+            let mut visible_models = []math::Mat4{}
+            let mut visible_tints = []color::Color{}
+            let mut culled_count = 0
+
+            let mut i = 0
+            while i < pillars.len {
+                if frustum.intersects_aabb(pillars[i].bounds) {
+                    visible_models.push(pillars[i].model)
+                    visible_tints.push(pillars[i].tint)
+                } else {
+                    culled_count += 1
+                }
+                i += 1
+            }
+
+            platform3d::draw_instances_tinted(cube_mesh, visible_models, visible_tints)
+            platform3d::present(0.05, 0.07, 0.1)
+
+            if frame % 60 == 0 {
+                println(f"[frame {frame}] Visible: {visible_models.len}/400, Culled: {culled_count}")
+            }
+        }
+
+        frame += 1
+    }
+}

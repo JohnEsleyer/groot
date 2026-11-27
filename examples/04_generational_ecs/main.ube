@@ -6,6 +6,7 @@ import "../../pkgs/groot/app" as app
 import "../../pkgs/groot/ecs" as ecs
 import "../../pkgs/groot/math" as math
 import "../../pkgs/groot/color" as color
+import "../../pkgs/groot/input" as input
 
 fn main() {
     let mut game = app::app_new(app::EngineConfig{
@@ -23,20 +24,21 @@ fn main() {
     let mut h3 = world.create_sprite_rgba(300.0, 150.0, 32.0, 32.0, 0.2, 0.4, 0.9, 1.0)
 
     let mut frame = 0
-    while game.is_running && frame < 120 {
-        // Despawn h2 at frame 40; slot becomes recyclable with incremented generation
-        if frame == 40 {
-            world.despawn(h2)
+    while game.is_running {
+        game.begin_frame()
+        if game.input.is_key_pressed(input::key_escape()) {
+            game.stop()
         }
 
-        // Spawn replacement at frame 60; reuses slot with new generational handle
-        if frame == 60 {
+        // Periodically recycle h2 to show generational safety in an ongoing loop
+        if frame % 120 == 40 {
+            world.despawn(h2)
+        }
+        if frame % 120 == 80 {
             h2 = world.create_sprite_rgba(200.0, 250.0, 48.0, 48.0, 1.0, 0.9, 0.2, 1.0)
         }
 
         arena {
-            game.begin_frame()
-
             // Draw active entities
             if let e1 = world.get(h1) {
                 if e1.has_sprite {

@@ -1,0 +1,164 @@
+package main
+
+import "../../pkgs/groot/app" as app
+import "../../pkgs/groot/math" as math
+import "../../pkgs/groot/render3d" as render3d
+import "../../pkgs/groot/platform3d" as platform3d
+import "../../pkgs/groot/color" as color
+import "../../pkgs/groot/input" as input
+
+struct Particle3D {
+    pos:      math::Vec3,
+    vel:      math::Vec3,
+    age:      f32,
+    lifetime: f32,
+    scale:    f32
+}
+
+fn reset_particle(mut p: Particle3D, seed: i32) {
+    p.pos = math::vec3(0.0, 0.2, 0.0)
+
+    let angle = ((seed * 37) % 628) as f32 * 0.01
+    let speed = 4.0 + (((seed * 19) % 50) as f32) * 0.1
+    let spread = 0.8 + (((seed * 11) % 40) as f32) * 0.02
+
+    p.vel = math::vec3(
+        math::sin(angle) * spread,
+        speed,
+        math::cos(angle) * spread
+    )
+    // Keep the mixed int/float arithmetic in locals; field assignment
+    // otherwise forces the whole expression to the field's type too early.
+    let lifetime = 1.6 + (((seed * 7) % 30) as f32) * 0.03
+    let scale = 0.25 + (((seed * 13) % 20) as f32) * 0.01
+
+    p.age = 0.0
+    p.lifetime = lifetime
+    p.scale = scale
+}
+
+fn main() {
+    let mut game = app::app_new(app::EngineConfig{
+        width: 1280,
+        height: 720,
+        title: "Groot 3D - Particle Fountain Simulation"
+    })
+    game.start()
+
+    let cube_mesh = platform3d::load_cube_mesh()
+    let plane_mesh = platform3d::load_plane_mesh(50.0)
+
+    let mut cam = render3d::Camera3D{
+        position: math::vec3(0.0, 9.0, 18.0),
+        target:   math::vec3(0.0, 2.5, 0.0),
+        up:       math::vec3(0.0, 1.0, 0.0),
+        fov_y:    0.785398,
+        aspect:   1280.0 / 720.0,
+        near:     0.1,
+        far:      200.0
+    }
+
+    // Spawn 300 initial particles
+    let mut particles = []Particle3D{}
+    let mut i = 0
+    while i < 300 {
+        let mut p = Particle3D{
+            pos:      math::vec3_zero(),
+            vel:      math::vec3_zero(),
+            age:      0.0,
+            lifetime: 2.0,
+            scale:    0.3
+        }
+        reset_particle(mut p, i)
+        // Stagger spawn times so they don't all shoot up simultaneously
+        let staggered_age = ((i % 100) as f32) * 0.02
+        p.age = staggered_age
+        particles.push(p)
+        i += 1
+    }
+
+    let dt: f32 = 0.016666
+    let gravity: f32 = 9.8
+    let mut frame = 0
+    let mut cam_angle: f32 = 0.0
+
+    while game.is_running {
+        game.begin_frame()
+        if game.input.is_key_pressed(input::key_escape()) {
+            game.stop()
+        }
+
+        cam_angle += 0.008
+        cam.position.x = math::sin(cam_angle) * 18.0
+        cam.position.z = math::cos(cam_angle) * 18.0
+
+        // 1. Update Particle Physics
+        let mut p_idx = 0
+        while p_idx < particles.len {
+            particles[p_idx].age += dt
+            if particles[p_idx].age >= particles[p_idx].lifetime {
+                reset_particle(mut particles[p_idx], frame + p_idx)
+            } else {
+                particles[p_idx].vel.y -= gravity * dt
+                particles[p_idx].pos.x += particles[p_idx].vel.x * dt
+                particles[p_idx].pos.y += particles[p_idx].vel.y * dt
+                particles[p_idx].pos.z += particles[p_idx].vel.z * dt
+
+                // Bounce on ground plane (Y = 0) with energy dissipation
+                if particles[p_idx].pos.y <= 0.1 {
+                    particles[p_idx].pos.y = 0.1
+                    particles[p_idx].vel.y = -particles[p_idx].vel.y * 0.65
+                    particles[p_idx].vel.x *= 0.8
+                    particles[p_idx].vel.z *= 0.8
+                }
+            }
+            p_idx += 1
+        }
+
+        // 2. Render Scene via Scratch Arena
+        arena {
+            platform3d::set_camera(cam.view_projection(), cam.position)
+            platform3d::set_sun_light(math::vec3(-0.4, -1.0, -0.3), color::white())
+
+            // Ground floor
+            let mut ground_inst = []math::Mat4{}
+            ground_inst.push(math::mat4_translate(0.0, 0.0, 0.0))
+            platform3d::draw_instances(plane_mesh, ground_inst)
+
+            // Fountain base pedestal
+            let mut base_inst = []math::Mat4{}
+            base_inst.push(math::mat4_mul(math::mat4_translate(0.0, 0.2, 0.0), math::mat4_scale(1.2, 0.4, 1.2)))
+            platform3d::draw_instances(cube_mesh, base_inst)
+
+            // Build particle instances & color transition:
+            // Fresh (Yellow) -> Midlife (Orange/Red) -> Expired (Dark Violet)
+            let mut transforms = []math::Mat4{}
+            let mut tints = []color::Color{}
+
+            let mut d_idx = 0
+            while d_idx < particles.len {
+                let p = particles[d_idx]
+                let life_ratio = p.age / p.lifetime
+                let cur_scale = p.scale * (1.0 - life_ratio * 0.4)
+
+                let trans = math::mat4_translate(p.pos.x, p.pos.y, p.pos.z)
+                let scl = math::mat4_scale(cur_scale, cur_scale, cur_scale)
+                transforms.push(math::mat4_mul(trans, scl))
+
+                let tint = if life_ratio < 0.4 {
+                    color::lerp(color::rgba(1.0, 1.0, 0.2, 1.0), color::rgba(1.0, 0.4, 0.1, 1.0), life_ratio / 0.4)
+                } else {
+                    color::lerp(color::rgba(1.0, 0.4, 0.1, 1.0), color::rgba(0.4, 0.1, 0.6, 0.4), (life_ratio - 0.4) / 0.6)
+                }
+                tints.push(tint)
+
+                d_idx += 1
+            }
+
+            platform3d::draw_instances_tinted(cube_mesh, transforms, tints)
+            platform3d::present(0.03, 0.03, 0.05)
+        }
+
+        frame += 1
+    }
+}

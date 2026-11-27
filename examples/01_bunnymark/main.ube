@@ -2,6 +2,7 @@ package main
 
 import "../../pkgs/groot/app" as app
 import "../../pkgs/groot/color" as color
+import "../../pkgs/groot/input" as input
 import "../../pkgs/groot/platform" as platform
 
 struct Bunny {
@@ -35,9 +36,13 @@ fn main() {
 
     let gravity: f32 = 980.0
     let dt: f32 = 0.016666
-    let mut frame = 0
 
-    while game.is_running && frame < 300 {
+    while game.is_running {
+        game.begin_frame()
+        if game.input.is_key_pressed(input::key_escape()) {
+            game.stop()
+        }
+
         let mut b_idx = 0
         while b_idx < bunnies.len {
             let nx = bunnies[b_idx].x + bunnies[b_idx].vx * dt
@@ -61,7 +66,6 @@ fn main() {
 
         // Transient frame rendering inside regional scratch arena
         arena {
-            game.begin_frame()
             let mut draw_idx = 0
             while draw_idx < bunnies.len {
                 game.draw_rect(
@@ -75,7 +79,5 @@ fn main() {
             }
             game.present()
         }
-
-        frame += 1
     }
 }

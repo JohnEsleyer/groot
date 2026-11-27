@@ -171,6 +171,9 @@ impl ube::graphics::gpu::Host for HostState {
 
     fn draw_frame(&mut self, r: f64, g: f64, b: f64) {
         let _ = self.pump_window_events();
+        if self.close_requested {
+            std::process::exit(0);
+        }
 
         let now = Instant::now();
         if let Some(target) = self.next_frame {
@@ -211,6 +214,9 @@ impl ube::graphics::gpu3d::Host for HostState {
 
     fn draw_frame(&mut self, clear_r: f64, clear_g: f64, clear_b: f64) {
         let _ = self.pump_window_events();
+        if self.close_requested {
+            std::process::exit(0);
+        }
 
         let now = Instant::now();
         if let Some(target) = self.next_frame {
@@ -339,8 +345,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // If guest ran synchronously (has_tick == false), the synchronous loop has finished.
-    // We now transition into the standard winit event loop to keep the window open
-    // and responsive to OS events and redraws.
+    // Exit cleanly without falling into a redundant, frozen event loop.
+    if !has_tick {
+        return Ok(());
+    }
+
     let event_loop = event_loop_cell
         .0
         .lock()

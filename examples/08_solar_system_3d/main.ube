@@ -1,0 +1,116 @@
+package main
+
+import "../../pkgs/groot/app" as app
+import "../../pkgs/groot/math" as math
+import "../../pkgs/groot/render3d" as render3d
+import "../../pkgs/groot/platform3d" as platform3d
+import "../../pkgs/groot/color" as color
+import "../../pkgs/groot/input" as input
+
+fn main() {
+    let mut game = app::app_new(app::EngineConfig{
+        width: 1280,
+        height: 720,
+        title: "Groot 3D - Solar System (Hierarchical Transforms)"
+    })
+    game.start()
+
+    let cube_mesh = platform3d::load_cube_mesh()
+
+    let mut cam = render3d::Camera3D{
+        position: math::vec3(0.0, 45.0, 80.0),
+        target:   math::vec3(0.0, 0.0, 0.0),
+        up:       math::vec3(0.0, 1.0, 0.0),
+        fov_y:    0.785398, // 45 degrees
+        aspect:   1280.0 / 720.0,
+        near:     0.1,
+        far:      1000.0
+    }
+
+    let mut t: f32 = 0.0
+    let mut frame = 0
+
+    while game.is_running {
+        game.begin_frame()
+        if game.input.is_key_pressed(input::key_escape()) {
+            game.stop()
+        }
+
+        t += 0.02
+
+        // Slowly pan camera in an inclined orbit
+        cam.position.x = math::sin(t * 0.15) * 80.0
+        cam.position.z = math::cos(t * 0.15) * 80.0
+        cam.position.y = 35.0 + math::sin(t * 0.1) * 15.0
+
+        arena {
+            platform3d::set_camera(cam.view_projection(), cam.position)
+            platform3d::set_sun_light(math::vec3(-0.2, -1.0, -0.4), color::white())
+
+            let mut transforms = []math::Mat4{}
+            let mut tints = []color::Color{}
+
+            // 1. Sun at Origin
+            let sun_spin = math::quat_from_axis_angle(math::vec3(0.0, 1.0, 0.0), t * 0.5).to_mat4()
+            let sun_scale = math::mat4_scale(4.0, 4.0, 4.0)
+            transforms.push(math::mat4_mul(sun_spin, sun_scale))
+            tints.push(color::rgba(1.0, 0.85, 0.2, 1.0)) // Glowing gold
+
+            // 2. Mercury (fast orbit, close distance)
+            let m_angle = t * 1.6
+            let m_x = math::sin(m_angle) * 8.0
+            let m_z = math::cos(m_angle) * 8.0
+            transforms.push(math::mat4_mul(math::mat4_translate(m_x, 0.0, m_z), math::mat4_scale(0.8, 0.8, 0.8)))
+            tints.push(color::rgba(0.7, 0.6, 0.5, 1.0)) // Slate gray
+
+            // 3. Earth (medium orbit)
+            let e_angle = t * 0.9
+            let e_x = math::sin(e_angle) * 18.0
+            let e_z = math::cos(e_angle) * 18.0
+            let earth_world = math::mat4_translate(e_x, 0.0, e_z)
+            transforms.push(math::mat4_mul(earth_world, math::mat4_scale(1.5, 1.5, 1.5)))
+            tints.push(color::rgba(0.2, 0.6, 1.0, 1.0)) // Ocean blue
+
+            // 3b. Moon (hierarchical child: local transform relative to Earth)
+            let moon_angle = t * 4.0
+            let moon_local_x = math::sin(moon_angle) * 3.5
+            let moon_local_z = math::cos(moon_angle) * 3.5
+            let moon_local = math::mat4_mul(math::mat4_translate(moon_local_x, 0.5, moon_local_z), math::mat4_scale(0.5, 0.5, 0.5))
+            transforms.push(math::mat4_mul(earth_world, moon_local))
+            tints.push(color::rgba(0.85, 0.85, 0.85, 1.0)) // Moon white
+
+            // 4. Mars (outer red planet)
+            let mars_angle = t * 0.6
+            let mars_x = math::sin(mars_angle) * 27.0
+            let mars_z = math::cos(mars_angle) * 27.0
+            transforms.push(math::mat4_mul(math::mat4_translate(mars_x, 0.0, mars_z), math::mat4_scale(1.1, 1.1, 1.1)))
+            tints.push(color::rgba(0.9, 0.35, 0.2, 1.0)) // Rust red
+
+            // 5. Saturn & Asteroid Ring System
+            let saturn_angle = t * 0.35
+            let saturn_x = math::sin(saturn_angle) * 38.0
+            let saturn_z = math::cos(saturn_angle) * 38.0
+            let saturn_world = math::mat4_translate(saturn_x, 0.0, saturn_z)
+            transforms.push(math::mat4_mul(saturn_world, math::mat4_scale(2.6, 2.6, 2.6)))
+            tints.push(color::rgba(0.85, 0.75, 0.55, 1.0)) // Pale amber
+
+            // Saturn's Ring: 32 orbiting asteroids
+            let mut r_idx = 0
+            while r_idx < 32 {
+                let r_angle = ((r_idx as f32) / 32.0) * 6.283185 + t * 0.8
+                let dist = 5.2 + ((r_idx % 3) as f32) * 0.4
+                let rx = math::sin(r_angle) * dist
+                let rz = math::cos(r_angle) * dist
+                let asteroid_local = math::mat4_mul(math::mat4_translate(rx, 0.0, rz), math::mat4_scale(0.25, 0.1, 0.25))
+                transforms.push(math::mat4_mul(saturn_world, asteroid_local))
+                tints.push(color::rgba(0.65, 0.6, 0.55, 0.9))
+                r_idx += 1
+            }
+
+            platform3d::draw_instances_tinted(cube_mesh, transforms, tints)
+            platform3d::present(0.02, 0.02, 0.04)
+        }
+
+        frame += 1
+    }
+}

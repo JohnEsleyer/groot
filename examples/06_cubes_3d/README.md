@@ -29,7 +29,7 @@ single GPU draw call.
 
 ```bash
 # From the _groot directory:
-../bin/ube build examples/06_cubes_3d/main.ube --target=wasi2 -o cubes3d.wasm
+ube build examples/06_cubes_3d/main.ube --target=wasi2 -o cubes3d.wasm
 cargo run --manifest-path host/Cargo.toml -- cubes3d.wasm
 ```
 

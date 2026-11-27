@@ -36,7 +36,7 @@ fn main() {
     let dt = 0.016
 
     let mut frame: i32 = 0
-    arena while frame < 600 {
+    arena while true {
         controls.begin_frame()
         controls.update_from_host()
 

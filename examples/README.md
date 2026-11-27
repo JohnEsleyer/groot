@@ -31,6 +31,10 @@ cd _groot
 ./run.sh 05_camera_and_coords
 ./run.sh 06_cubes_3d
 ./run.sh 07_host_tick_3d
+./run.sh 08_solar_system_3d
+./run.sh 09_frustum_culling_3d
+./run.sh 10_procedural_mesh_3d
+./run.sh 11_particle_fountain_3d
 ./run.sh flappy_groot
 ```
 
@@ -43,6 +47,10 @@ cd _groot
 | [`05_camera_and_coords/`](05_camera_and_coords/README.md) | **Camera & Coordinates** | 2D | Orthographic 2D camera, world-to-screen transforms, pan, and zoom. |
 | [`06_cubes_3d/`](06_cubes_3d/README.md) | **3D Instanced Cubes** | 3D | Orbiting 3D camera, directional lighting, mesh primitives, and instanced draw calls. |
 | [`07_host_tick_3d/`](07_host_tick_3d/README.md) | **Host-Driven Tick (3D)** | 3D | Inverted game loop: guest exports `init()` and `tick(dt: f32) -> bool` driven by host events. |
+| [`08_solar_system_3d/`](08_solar_system_3d/README.md) | **3D Solar System** | 3D | Hierarchical parent→child transforms, tinted instancing, and quaternion orbital mechanics. |
+| [`09_frustum_culling_3d/`](09_frustum_culling_3d/README.md) | **Frustum Culling (3D)** | 3D | Extracts `math::Frustum` planes and culls 400 pillars against `math::AABB3D` bounds before submitting instances. |
+| [`10_procedural_mesh_3d/`](10_procedural_mesh_3d/README.md) | **Procedural Mesh (3D)** | 3D | Builds a custom octahedron vertex/index buffer in Ube, uploads it, and tumbles it with quaternions. |
+| [`11_particle_fountain_3d/`](11_particle_fountain_3d/README.md) | **Particle Fountain (3D)** | 3D | 300 gravity-driven particles with ground bounces, lifecycle recycling, and `color::lerp` gradients. |
 | [`flappy_groot/`](flappy_groot/README.md) | **Flappy Groot** | 2D | Full Flappy Bird game loop with entity recycling, flap physics, and regional scratch rendering. |
 
 ---
@@ -93,7 +101,31 @@ cargo run --manifest-path host/Cargo.toml -- cubes3d.wasm
 cargo run --manifest-path host/Cargo.toml -- host_tick3d.wasm
 ```
 
-### 8. Flappy Groot
+### 8. 08 Solar System (3D)
+```bash
+../bin/ube build examples/08_solar_system_3d/main.ube --target=wasi2 -o solar3d.wasm
+cargo run --manifest-path host/Cargo.toml -- solar3d.wasm
+```
+
+### 9. 09 Frustum Culling (3D)
+```bash
+../bin/ube build examples/09_frustum_culling_3d/main.ube --target=wasi2 -o culling3d.wasm
+cargo run --manifest-path host/Cargo.toml -- culling3d.wasm
+```
+
+### 10. 10 Procedural Mesh (3D)
+```bash
+../bin/ube build examples/10_procedural_mesh_3d/main.ube --target=wasi2 -o procmesh3d.wasm
+cargo run --manifest-path host/Cargo.toml -- procmesh3d.wasm
+```
+
+### 11. 11 Particle Fountain (3D)
+```bash
+../bin/ube build examples/11_particle_fountain_3d/main.ube --target=wasi2 -o particles3d.wasm
+cargo run --manifest-path host/Cargo.toml -- particles3d.wasm
+```
+
+### 12. Flappy Groot
 ```bash
 ../bin/ube build examples/flappy_groot/main.ube --target=wasi2 -o flappy.wasm
 cargo run --manifest-path host/Cargo.toml -- flappy.wasm

@@ -127,6 +127,10 @@ native host.
 | [`05_camera_and_coords`](examples/05_camera_and_coords/README.md) | 2D | Orthographic camera, pan/zoom, and world-to-screen conversion. |
 | [`06_cubes_3d`](examples/06_cubes_3d/README.md) | 3D | 100 instanced cubes, orbiting camera, ground plane, directional light. |
 | [`07_host_tick_3d`](examples/07_host_tick_3d/README.md) | 3D | Host-driven `init`/`tick` loop with a static instanced cube grid. |
+| [`08_solar_system_3d`](examples/08_solar_system_3d/README.md) | 3D | Hierarchical parent→child transforms, tinted instancing, and quaternion orbits. |
+| [`09_frustum_culling_3d`](examples/09_frustum_culling_3d/README.md) | 3D | Extracts frustum planes and culls 400 AABB pillars before instanced rendering. |
+| [`10_procedural_mesh_3d`](examples/10_procedural_mesh_3d/README.md) | 3D | Generates a custom octahedron vertex/index buffer and tumbles it with quaternions. |
+| [`11_particle_fountain_3d`](examples/11_particle_fountain_3d/README.md) | 3D | 300 gravity-driven particles with bounces, recycling, and color gradients. |
 | [`flappy_groot`](examples/flappy_groot/README.md) | 2D | Complete game loop with entity recycling, flap physics, and scratch rendering. |
 
 See [`examples/README.md`](examples/README.md) for per-example build commands and a

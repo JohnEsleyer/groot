@@ -3,6 +3,7 @@ package main
 import "../../pkgs/groot/app" as app
 import "../../pkgs/groot/color" as color
 import "../../pkgs/groot/math" as math
+import "../../pkgs/groot/input" as input
 
 struct Pipe {
     x: f32,
@@ -89,14 +90,23 @@ fn main() {
 
     let mut game = game_reset()
     let dt: f32 = 0.016667
-    let mut frame = 0
 
-    while game_app.is_running && frame < 180 {
+    while game_app.is_running {
+        game_app.begin_frame()
+        if game_app.input.is_key_pressed(input::key_escape()) {
+            game_app.stop()
+        }
+        if game_app.input.is_key_pressed(input::key_space()) || game_app.input.state.is_mouse_down(1) {
+            if game.is_game_over {
+                game = game_reset()
+            } else {
+                game.bird.vy = game.bird.jump_force
+            }
+        }
+
         game.update(dt)
 
         arena {
-            game_app.begin_frame()
-
             // Draw ground
             game_app.draw_rect(0.0, 560.0, 800.0, 40.0, color::green())
 
@@ -111,7 +121,5 @@ fn main() {
 
             game_app.present()
         }
-
-        frame += 1
     }
 }

@@ -5,6 +5,7 @@ import "../../pkgs/groot/math" as math
 import "../../pkgs/groot/render3d" as render3d
 import "../../pkgs/groot/platform3d" as platform3d
 import "../../pkgs/groot/color" as color
+import "../../pkgs/groot/input" as input
 
 fn main() {
     let mut game = app::app_new(app::EngineConfig{
@@ -30,7 +31,12 @@ fn main() {
     let mut angle: f32 = 0.0
     let mut frame = 0
 
-    while game.is_running && frame < 600 {
+    while game.is_running {
+        game.begin_frame()
+        if game.input.is_key_pressed(input::key_escape()) {
+            game.stop()
+        }
+
         angle += 0.015
 
         // Orbit camera around center at a comfortable panoramic distance
