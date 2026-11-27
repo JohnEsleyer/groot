@@ -1,5 +1,6 @@
 mod gpu;
 mod input;
+mod telemetry;
 mod window;
 
 use gpu::GpuRenderer;
@@ -7,6 +8,7 @@ use input::{InputQueue, RawInputEvent};
 use std::env;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use telemetry::{TelemetryPacket, TelemetryServer};
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiView};
@@ -32,6 +34,14 @@ struct HostState {
     frame_interval: Duration,
     next_frame: Option<Instant>,
     close_requested: bool,
+    // --- Telemetry (debug mode only) ---
+    telemetry: Option<TelemetryServer>,
+    frame_index: u64,
+    frame_start: Option<Instant>,
+    // --- Manifest values (from groot.toml, injected by groot CLI via env vars) ---
+    manifest_width:  u32,
+    manifest_height: u32,
+    manifest_title:  String,
 }
 
 impl HostState {
@@ -160,6 +170,18 @@ impl ube::graphics::input::Host for HostState {
     }
 }
 
+impl ube::graphics::manifest::Host for HostState {
+    fn manifest_width(&mut self) -> u32 {
+        self.manifest_width
+    }
+    fn manifest_height(&mut self) -> u32 {
+        self.manifest_height
+    }
+    fn manifest_title(&mut self) -> String {
+        self.manifest_title.clone()
+    }
+}
+
 impl ube::graphics::gpu::Host for HostState {
     fn setup(&mut self, width: u32, height: u32) {
         self.gpu.resize(width.max(1), height.max(1));
@@ -176,6 +198,12 @@ impl ube::graphics::gpu::Host for HostState {
         }
 
         let now = Instant::now();
+        let frame_time_us = self
+            .frame_start
+            .map(|s| s.elapsed().as_micros() as u32)
+            .unwrap_or(16_666);
+        self.frame_start = Some(now);
+
         if let Some(target) = self.next_frame {
             if target > now {
                 std::thread::sleep(target - now);
@@ -187,6 +215,30 @@ impl ube::graphics::gpu::Host for HostState {
 
         if let Some(win) = self.window_mgr.window() {
             win.request_redraw();
+        }
+
+        // Publish telemetry in debug mode.
+        self.frame_index += 1;
+        if let Some(ref telem) = self.telemetry {
+            let fps = if frame_time_us > 0 {
+                1_000_000.0 / frame_time_us as f32
+            } else {
+                60.0
+            };
+            let (mouse_x, mouse_y, mouse_mask, keys_count) = {
+                let q = self.inputs.lock().unwrap();
+                (q.mouse_x, q.mouse_y, q.mouse_buttons_mask(), q.pressed_keys_count())
+            };
+            telem.publish(TelemetryPacket {
+                frame_index: self.frame_index,
+                frame_time_us,
+                fps,
+                mouse_x,
+                mouse_y,
+                mouse_buttons_mask: mouse_mask,
+                pressed_keys_count: keys_count,
+                ..Default::default()
+            });
         }
     }
 }
@@ -263,6 +315,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ube::graphics::gpu::add_to_linker(&mut linker, |state: &mut HostState| state)?;
     ube::graphics::gpu3d::add_to_linker(&mut linker, |state: &mut HostState| state)?;
     ube::graphics::input::add_to_linker(&mut linker, |state: &mut HostState| state)?;
+    ube::graphics::manifest::add_to_linker(&mut linker, |state: &mut HostState| state)?;
 
     let wasi = WasiCtxBuilder::new()
         .inherit_stdout()
@@ -278,6 +331,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .filter(|fps| *fps > 0.0)
             .unwrap_or(60.0),
     );
+
+    // Start telemetry IPC server in debug mode (GROOT_MODE != "release").
+    let debug_mode = env::var("GROOT_MODE")
+        .map(|v| v != "release")
+        .unwrap_or(true);
+    let project_name = env::var("GROOT_PROJECT").unwrap_or_else(|_| "groot".into());
+    let telemetry = if debug_mode {
+        TelemetryServer::start(&project_name)
+    } else {
+        None
+    };
+
+    // Manifest values injected by the groot CLI via environment variables.
+    // These are read by app_new_from_manifest() through the manifest ABI.
+    let manifest_width  = env::var("GROOT_WIDTH").ok()
+        .and_then(|v| v.parse::<u32>().ok()).unwrap_or(1280);
+    let manifest_height = env::var("GROOT_HEIGHT").ok()
+        .and_then(|v| v.parse::<u32>().ok()).unwrap_or(720);
+    let manifest_title  = env::var("GROOT_TITLE")
+        .unwrap_or_else(|_| "Groot Game".into());
+
     let mut store = Store::new(
         &engine,
         HostState {
@@ -290,6 +364,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             frame_interval,
             next_frame: None,
             close_requested: false,
+            telemetry,
+            frame_index: 0,
+            frame_start: None,
+            manifest_width,
+            manifest_height,
+            manifest_title,
         },
     );
 

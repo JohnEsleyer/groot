@@ -36,6 +36,30 @@ pub fn app_new(cfg: EngineConfig) -> App {
     }
 }
 
+// app_new_from_manifest creates an App whose window dimensions, title, and
+// clear colour are read from the groot.toml manifest at runtime via host ABI
+// calls. This is the preferred constructor for standalone Groot projects: the
+// source code stays free of hardcoded window settings.
+pub fn app_new_from_manifest() -> App {
+    let w = platform::manifest_width()
+    let h = platform::manifest_height()
+    let title = platform::manifest_title()
+    let cfg = EngineConfig{
+        width:  w,
+        height: h,
+        title:  move title
+    }
+    return App{
+        config:     move cfg,
+        batcher:    render::batcher_new(2048),
+        camera:     render::camera_new(w as f32, h as f32),
+        input:      input::manager_new(),
+        time:       time::time_new(),
+        clear:      color::clear(),
+        is_running: true
+    }
+}
+
 pub fn (mut app App) start() {
     platform::open_window(app.config.width, app.config.height, app.config.title)
     platform::setup(app.config.width, app.config.height)

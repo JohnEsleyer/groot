@@ -26,6 +26,13 @@ extern "ube:graphics/input@0.2.0" fn "is-mouse-down" host_is_mouse_down(button: 
 extern "ube:graphics/input@0.2.0" fn "mouse-x" host_mouse_x() -> f32
 extern "ube:graphics/input@0.2.0" fn "mouse-y" host_mouse_y() -> f32
 
+// Manifest ABI — the host injects values from groot.toml so that
+// app_new_from_manifest() can read window dimensions and title at runtime
+// without them being baked into the .wasm binary.
+extern "ube:graphics/manifest@0.2.0" fn "manifest-width"  host_manifest_width()  -> i32
+extern "ube:graphics/manifest@0.2.0" fn "manifest-height" host_manifest_height() -> i32
+extern "ube:graphics/manifest@0.2.0" fn "manifest-title"  host_manifest_title()  -> string
+
 pub struct WindowConfig {
     pub width: i32,
     pub height: i32,
@@ -68,4 +75,19 @@ pub fn mouse_x() -> f32 {
 
 pub fn mouse_y() -> f32 {
     return host_mouse_y()
+}
+
+/// Returns window width from the project manifest (groot.toml).
+pub fn manifest_width() -> i32 {
+    return host_manifest_width()
+}
+
+/// Returns window height from the project manifest (groot.toml).
+pub fn manifest_height() -> i32 {
+    return host_manifest_height()
+}
+
+/// Returns the window title string from the project manifest (groot.toml).
+pub fn manifest_title() -> string {
+    return host_manifest_title()
 }

@@ -29,10 +29,20 @@ interface input {
     mouse-y: func() -> f32;
 }
 
+/// Manifest ABI — host exposes project configuration from groot.toml so that
+/// app_new_from_manifest() can read window dimensions and title at runtime
+/// without baking them into the .wasm binary.
+interface manifest {
+    manifest-width:  func() -> u32;
+    manifest-height: func() -> u32;
+    manifest-title:  func() -> string;
+}
+
 world groot-runner {
     import window;
     import gpu;
     import gpu3d;
     import input;
+    import manifest;
     include wasi:cli/command@0.2.0;
 }

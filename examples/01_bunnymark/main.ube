@@ -1,9 +1,9 @@
 package main
 
-import "../../pkgs/groot/app" as app
-import "../../pkgs/groot/color" as color
-import "../../pkgs/groot/input" as input
-import "../../pkgs/groot/platform" as platform
+import "groot/app" as app
+import "groot/color" as color
+import "groot/input" as input
+import "groot/platform" as platform
 
 struct Bunny {
     x: f32,

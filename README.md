@@ -83,27 +83,43 @@ while game.is_running {
 - **Ube 2.0 compiler** — use the bundled `../bin/ube` from inside `_groot`, or a
   compatible `ube` on `PATH`.
 
-### Run an example
+### Build the Groot toolchain
+
+From the parent `ube` repository root:
 
 ```bash
-cd _groot
-
-# Build and run any example by folder name (defaults to 02_platformer)
-./run.sh 06_cubes_3d
+make groot-tools
 ```
 
-Or build and run manually:
+This builds `bin/groot`, `bin/groot-host`, and `bin/groot-monitor` (the ratatui live telemetry TUI).
+
+### Run an example with `groot`
 
 ```bash
-ube build examples/06_cubes_3d/main.ube --target=wasi2 -o cubes3d.wasm
-cargo run --manifest-path host/Cargo.toml -- cubes3d.wasm
+cd _groot/examples/01_bunnymark
+
+# Build and run in debug mode (default, with live telemetry IPC)
+groot start .
+
+# Attach the 60 FPS ratatui TUI inspector in another terminal
+groot monitor
+
+# Or launch the game and monitor together
+groot start . --monitor
+
+# Build and run in optimized release mode (telemetry disabled)
+groot start . --release
 ```
 
-Set a target frame rate for the host with `GROOT_FPS`:
+### Create a new project
 
 ```bash
-GROOT_FPS=120 cargo run --manifest-path host/Cargo.toml -- cubes3d.wasm
+groot init my_game
+cd my_game
+groot start .
 ```
+
+Each project has a `groot.toml` manifest and imports engine packages directly via `groot/*` (e.g. `import "groot/app"`).
 
 Type-check a guest without producing a binary:
 

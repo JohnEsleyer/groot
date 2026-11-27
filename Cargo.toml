@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "host",
+    "monitor",
 ]
 resolver = "2"
 

@@ -2,11 +2,11 @@ package main
 
 // 05 — Camera and Coordinates: World-to-screen transforms, pan, and zoom
 
-import "../../pkgs/groot/app" as app
-import "../../pkgs/groot/render" as render
-import "../../pkgs/groot/math" as math
-import "../../pkgs/groot/color" as color
-import "../../pkgs/groot/input" as input
+import "groot/app" as app
+import "groot/render" as render
+import "groot/math" as math
+import "groot/color" as color
+import "groot/input" as input
 
 fn main() {
     let mut game = app::app_new(app::EngineConfig{

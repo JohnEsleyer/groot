@@ -2,10 +2,10 @@ package main
 
 // 03 — Physics sandbox: bouncing bodies and AABB manifold queries.
 
-import "../../pkgs/groot/render" as render
-import "../../pkgs/groot/physics2d" as physics2d
-import "../../pkgs/groot/platform" as platform
-import "../../pkgs/groot/input" as input
+import "groot/render" as render
+import "groot/physics2d" as physics2d
+import "groot/platform" as platform
+import "groot/input" as input
 
 struct Particle {
     x: f32,

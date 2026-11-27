@@ -1,11 +1,11 @@
 package main
 
-import "../../pkgs/groot/app" as app
-import "../../pkgs/groot/math" as math
-import "../../pkgs/groot/render3d" as render3d
-import "../../pkgs/groot/platform3d" as platform3d
-import "../../pkgs/groot/color" as color
-import "../../pkgs/groot/input" as input
+import "groot/app" as app
+import "groot/math" as math
+import "groot/render3d" as render3d
+import "groot/platform3d" as platform3d
+import "groot/color" as color
+import "groot/input" as input
 
 fn main() {
     let mut game = app::app_new(app::EngineConfig{
