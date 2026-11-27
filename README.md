@@ -1,14 +1,35 @@
 # Groot Engine (Ube Edition)
 
-**Groot** is a zero-GC 2D/3D game engine written directly in **Ube**, targeting the **WASI 0.2 Component Model** and backed by a high-throughput native Rust host (`winit` + `wgpu` + `wasmtime`).
+**Groot** is a zero-GC, data-oriented **2D/3D game engine** written in **Ube**. Guest
+games compile directly to **WASI 0.2 WebAssembly components** and run inside a native
+Rust host built on **winit + wgpu + wasmtime**.
 
-The previous GoScript-based engine is preserved under `legacy/` (and on the `legacy-goscript` git branch) for reference.
+There is no garbage collector, no scripting VM, and no hidden per-frame heap growth:
+persistent state lives in flat values and generational pools, while transient frame data
+is allocated in regional bump arenas and reclaimed in one pointer reset.
+
+The previous GoScript-based engine is preserved under `legacy/` for historical
+reference.
 
 ---
 
-## Architecture Overview
+## At a Glance
 
-```
+- **2D renderer** — color-vertex quad batching, `Camera2D`, world/screen transforms.
+- **3D forward renderer** — indexed meshes, perspective camera, directional lighting,
+  per-instance model matrices, and optional per-instance tints.
+- **Built-in primitives** — cube and ground plane meshes for quick 3D scenes.
+- **Game systems** — generational ECS, AABB collision/raycasts, input state, texture
+  atlas regions, timing/FPS tracking.
+- **Two loop models** — guest-driven `main()` loops, or host-driven exported
+  `init()` / `tick(dt)` entry points.
+- **Single sandboxed ABI** — `ube:graphics@0.2.0` over the WASI 0.2 Component Model.
+
+---
+
+## Architecture
+
+```text
 ┌───────────────────────────────────────────────────────────────┐
 │                     GAME APPLICATION (Ube)                    │
 │        gameplay, scenes, animation, UI, spawn logic           │
@@ -16,19 +37,31 @@ The previous GoScript-based engine is preserved under `legacy/` (and on the `leg
                                │
 ┌──────────────────────────────▼────────────────────────────────┐
 │                     GROOT CORE (Ube)                          │
-│  math · color · render · input · ecs · physics2d · assets     │
-│  time · app · platform                                        │
+│  app · render · render3d · math · color · ecs · physics2d     │
+│  input · assets · time · platform · platform3d                │
 └──────────────────────────────┬────────────────────────────────┘
                                │ WASI 0.2 component imports
 ┌──────────────────────────────▼────────────────────────────────┐
 │                  NATIVE HOST (Rust)                           │
-│  winit window/events · wgpu sprite batches · wasmtime + WASI  │
+│  winit window/events · wgpu 2D & 3D pipelines · wasmtime+WASI │
 └───────────────────────────────────────────────────────────────┘
 ```
 
-### Zero-GC Frame Memory
+The guest owns simulation, batching, cameras, and draw-list construction. The host is a
+thin, high-throughput hardware abstraction layer: it owns the window, swapchain, GPU
+buffers/pipelines, input queue, and frame pacing.
 
-Persistent simulation state uses flat value data (fixed arrays, structs, `Pool[T]`). Transient frame data is allocated in regional bump arenas (`arena { ... }`) and reclaimed in one bump-pointer reset:
+### Execution models
+
+1. **Guest-driven loop** — `main()` builds and presents frames synchronously through
+   `ube:graphics/*` imports.
+2. **Host-driven tick** — the component exports `init()` and `tick(dt: f32) -> bool`;
+   `groot-host` calls them on each redraw, keeping timing and presentation on the host.
+
+The runner auto-detects exported `tick`/`init` functions and falls back to the
+synchronous `wasi:cli/run` path otherwise.
+
+### Zero-GC frame memory
 
 ```ube
 while game.is_running {
@@ -36,87 +69,176 @@ while game.is_running {
         game.begin_frame()
         game.draw_rect(player.x, player.y, 32.0, 32.0, color::green())
         game.present()
-    } // Transient scratch memory wiped in 1 machine cycle
+    } // transient scratch memory wiped in one bump-pointer reset
 }
 ```
 
 ---
 
-## How to Run Examples
+## Quick Start
 
-All examples are located under `examples/` and can be checked, compiled to WASI 0.2 components, and run with the host runner:
+### Prerequisites
+
+- **Rust / Cargo** — builds the native host.
+- **Ube 2.0 compiler** — use the bundled `../bin/ube` from inside `_groot`, or a
+  compatible `ube` on `PATH`.
+
+### Run an example
 
 ```bash
 cd _groot
 
-# 1. Type-check any example
-../bin/ube check examples/01_bunnymark/main.ube
-
-# 2. Compile to a WASI 0.2 WebAssembly Component (.wasm)
-../bin/ube build examples/01_bunnymark/main.ube --target=wasi2 -o bunnymark.wasm
-
-# 3. Run with the native host runner
-cargo run --manifest-path host/Cargo.toml -- bunnymark.wasm
+# Build and run any example by folder name (defaults to 02_platformer)
+./run.sh 06_cubes_3d
 ```
 
-### Quick Run Matrix
+Or build and run manually:
 
-| Example | Build Command | Run Command |
-| :--- | :--- | :--- |
-| **01 Bunnymark** | `../bin/ube build examples/01_bunnymark/main.ube --target=wasi2 -o bunnymark.wasm` | `cargo run --manifest-path host/Cargo.toml -- bunnymark.wasm` |
-| **02 Platformer** | `../bin/ube build examples/02_platformer/main.ube --target=wasi2 -o platformer.wasm` | `cargo run --manifest-path host/Cargo.toml -- platformer.wasm` |
-| **03 Physics Sandbox** | `../bin/ube build examples/03_physics_sandbox/main.ube --target=wasi2 -o physics.wasm` | `cargo run --manifest-path host/Cargo.toml -- physics.wasm` |
-| **04 Generational ECS** | `../bin/ube build examples/04_generational_ecs/main.ube --target=wasi2 -o ecs.wasm` | `cargo run --manifest-path host/Cargo.toml -- ecs.wasm` |
-| **05 Camera & Coords** | `../bin/ube build examples/05_camera_and_coords/main.ube --target=wasi2 -o camera.wasm` | `cargo run --manifest-path host/Cargo.toml -- camera.wasm` |
-| **Flappy Groot** | `../bin/ube build examples/flappy_groot/main.ube --target=wasi2 -o flappy.wasm` | `cargo run --manifest-path host/Cargo.toml -- flappy.wasm` |
+```bash
+ube build examples/06_cubes_3d/main.ube --target=wasi2 -o cubes3d.wasm
+cargo run --manifest-path host/Cargo.toml -- cubes3d.wasm
+```
+
+Set a target frame rate for the host with `GROOT_FPS`:
+
+```bash
+GROOT_FPS=120 cargo run --manifest-path host/Cargo.toml -- cubes3d.wasm
+```
+
+Type-check a guest without producing a binary:
+
+```bash
+ube check examples/02_platformer/main.ube
+```
 
 ---
 
-## Directory Layout
+## Examples
 
-```
+All examples live under `examples/`, compile to WASI 0.2 components, and run on the
+native host.
+
+| Example | Type | What it demonstrates |
+| :--- | :--- | :--- |
+| [`01_bunnymark`](examples/01_bunnymark/README.md) | 2D | 1,000 bouncing entities stressing quad batching and frame arenas. |
+| [`02_platformer`](examples/02_platformer/README.md) | 2D | Gravity, jump curves, input handling, and AABB collision response. |
+| [`03_physics_sandbox`](examples/03_physics_sandbox/README.md) | 2D | Multi-body collisions, momentum, and impulse resolution. |
+| [`04_generational_ecs`](examples/04_generational_ecs/README.md) | 2D | Generational handles, slot reuse, and stale-entity safety. |
+| [`05_camera_and_coords`](examples/05_camera_and_coords/README.md) | 2D | Orthographic camera, pan/zoom, and world-to-screen conversion. |
+| [`06_cubes_3d`](examples/06_cubes_3d/README.md) | 3D | 100 instanced cubes, orbiting camera, ground plane, directional light. |
+| [`07_host_tick_3d`](examples/07_host_tick_3d/README.md) | 3D | Host-driven `init`/`tick` loop with a static instanced cube grid. |
+| [`flappy_groot`](examples/flappy_groot/README.md) | 2D | Complete game loop with entity recycling, flap physics, and scratch rendering. |
+
+See [`examples/README.md`](examples/README.md) for per-example build commands and a
+one-line verification script.
+
+---
+
+## Engine Packages
+
+| Package | Purpose |
+| :--- | :--- |
+| `pkgs/groot/app` | `EngineConfig`, `App` lifecycle, frame begin/present helpers. |
+| `pkgs/groot/render` | `SpriteBatcher` (8-float vertices), `Camera2D`, quad/rect drawing. |
+| `pkgs/groot/render3d` | `Camera3D` with view, projection, view-projection, and frustum. |
+| `pkgs/groot/platform` | 2D guest bridge to `ube:graphics/window`, `gpu`, and `input`. |
+| `pkgs/groot/platform3d` | 3D guest bridge: mesh upload, camera, light, instanced draws, primitives. |
+| `pkgs/groot/math` | `Vec2`, `Vec3`, `Mat4`, `Rect`, `Transform`, `Quat`, frustum/AABB types. |
+| `pkgs/groot/color` | RGBA `Color`, presets, and interpolation. |
+| `pkgs/groot/ecs` | Generational entity `World`, sprite/rigid-body components, handle lookup. |
+| `pkgs/groot/physics2d` | AABB checks, collision manifolds, raycasts, MTV resolution. |
+| `pkgs/groot/input` | Input state, per-frame edge detection, key code helpers. |
+| `pkgs/groot/assets` | Texture-atlas regions and grid slicing. |
+| `pkgs/groot/time` | Delta timing and FPS tracking. |
+
+---
+
+## Host ABI
+
+The contract lives in [`wit/groot.wit`](wit/groot.wit) and is exposed to guests as
+`ube:graphics@0.2.0`:
+
+| Interface | Operations |
+| :--- | :--- |
+| `window` | `create-window` |
+| `gpu` | `setup`, `set-vertices`, `draw-frame` |
+| `gpu3d` | mesh upload/destroy, camera, directional light, instanced draw, frame present |
+| `input` | key/mouse down queries, mouse position |
+
+The `groot-runner` world includes `wasi:cli/command@0.2.0`, so components can use WASI
+clock, filesystem, stdio, and other standard interfaces alongside graphics.
+
+**3D instance layout:** every instance is **20 floats** — 16 floats for a column-major
+model matrix followed by 4 floats for an RGBA tint. Guest code should always emit this
+canonical layout; `platform3d::draw_instances` and `draw_instances_tinted` handle packing
+for you.
+
+---
+
+## Repository Layout
+
+```text
 _groot/
 ├── Cargo.toml                 # Rust workspace
+├── run.sh                     # Build + run an example by name
 ├── wit/
-│   ├── groot.wit              # ube:graphics window/gpu world
-│   └── deps/                  # vendored WASI 0.2 WIT packages
+│   └── groot.wit              # ube:graphics@0.2.0 / groot-runner world
 ├── host/                      # Native runner (winit + wgpu + wasmtime)
 │   ├── Cargo.toml
 │   └── src/
-│       ├── main.rs            # component instantiation + event loop
+│       ├── main.rs            # component instantiation, loop detection, events
 │       ├── window.rs          # winit window manager
-│       ├── gpu.rs             # wgpu sprite pipeline / vertex batches
-│       └── input.rs           # raw host input queue
-├── pkgs/groot/                # Core Ube Engine Packages
-│   ├── app/                   # Game lifecycle and engine harness
-│   ├── math/                  # Vec2, Vec3, Mat4, Rect, Transform
-│   ├── color/                 # RGBA colors
-│   ├── render/                # Camera2D, SpriteBatcher (8-float vertex layout)
-│   ├── input/                 # Typed key/mouse state and InputManager
-│   ├── ecs/                   # Pool[Entity] world with generational handles
-│   ├── physics2d/             # AABB manifolds, raycasts, MTV resolution
-│   ├── assets/                # Texture-atlas regions and slicing
-│   ├── time/                  # Delta timing and FPS tracking
-│   └── platform/              # Guest bridge to ube:graphics WASI imports
-├── examples/                  # Fully working, documented examples
-│   ├── 01_bunnymark/          # 1,000 bouncing entities stress test
-│   ├── 02_platformer/         # Gravity, jump physics, and AABB collision
-│   ├── 03_physics_sandbox/    # Multi-body momentum & impulse resolution
-│   ├── 04_generational_ecs/   # Generational handle safety with Pool[Entity]
-│   ├── 05_camera_and_coords/  # World-to-screen transforms, pan, and zoom
-│   └── flappy_groot/          # Full Flappy Bird game sample
-├── docs/                      # Comprehensive engine documentation
-│   ├── architecture/          # System design, Zero-GC, Host ABI
-│   └── guides/                # Getting started, running examples, 2D batching, ECS
-├── llm.txt                    # Consolidated reference for LLM coding agents
-└── legacy/                    # Previous GoScript engine (historical reference)
+│       ├── gpu.rs             # wgpu 2D batches and 3D forward/instanced pipelines
+│       └── input.rs           # raw input queue and key/mouse state
+├── pkgs/groot/                # Core Ube engine packages
+│   ├── app/                   # App lifecycle and 2D frame harness
+│   ├── render/                # SpriteBatcher and Camera2D
+│   ├── render3d/              # Camera3D and frustum helpers
+│   ├── platform/              # 2D guest→host bridge
+│   ├── platform3d/            # 3D guest→host bridge and mesh primitives
+│   ├── math/                  # 2D/3D math and matrices
+│   ├── color/                 # RGBA color helpers
+│   ├── ecs/                   # Generational entity world
+│   ├── physics2d/             # AABB physics and raycasts
+│   ├── input/                 # Input state and key codes
+│   ├── assets/                # Texture atlas regions
+│   └── time/                  # Frame timing and FPS
+├── examples/                  # Runnable 2D and 3D examples with guides
+├── docs/                      # Architecture docs and developer guides
+├── _docs/                     # Engineering audits and post-mortems
+├── llm.txt                    # Condensed API reference for LLM agents
+└── legacy/                    # Previous GoScript engine (historical)
 ```
 
 ---
 
-## Learning Groot
+## Development
 
-- Read [`docs/README.md`](docs/README.md) for full tutorials and guides.
-- Read [`docs/guides/01-getting-started.md`](docs/guides/01-getting-started.md) for detailed compilation flags and runner configuration.
-- Read [`llm.txt`](llm.txt) for an LLM-optimized single-document reference.
-- Explore each folder under [`examples/`](examples/) with dedicated README guides explaining core game development principles.
+```bash
+cd _groot
+
+# Check the native host
+cargo check --manifest-path host/Cargo.toml
+
+# Build every example without keeping the artifacts
+for ex in examples/*/main.ube; do
+    ube build "$ex" --target=wasi2 -o /tmp/"$(basename "$(dirname "$ex")")".wasm
+done
+```
+
+---
+
+## Documentation
+
+- [`docs/README.md`](docs/README.md) — documentation index and package quick reference.
+- [`docs/architecture/01-system-overview.md`](docs/architecture/01-system-overview.md) —
+  guest/host boundary and architecture rationale.
+- [`docs/architecture/02-zero-gc-memory.md`](docs/architecture/02-zero-gc-memory.md) —
+  arenas, pools, and affine ownership.
+- [`docs/architecture/03-host-abi.md`](docs/architecture/03-host-abi.md) — the graphics
+  ABI and batch submission.
+- [`docs/guides/01-getting-started.md`](docs/guides/01-getting-started.md) — setup,
+  compilation, and runner configuration.
+- [`_docs/POST_MORTEM_3D_INSTANCING.md`](_docs/POST_MORTEM_3D_INSTANCING.md) — the 3D
+  instance-stride and matrix-transpose incident.
+- [`llm.txt`](llm.txt) — single-file API reference for LLM-assisted development.
