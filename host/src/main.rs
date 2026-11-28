@@ -174,10 +174,8 @@ impl HostState {
 
         self.gpu.draw_frame(r, g, b);
 
-        if self.in_event_loop {
-            if let Some(win) = self.window_mgr.window() {
-                win.request_redraw();
-            }
+        if let Some(win) = self.window_mgr.window() {
+            win.request_redraw();
         }
 
         let guest_plus_abi = self
