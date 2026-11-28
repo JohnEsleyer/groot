@@ -54,7 +54,7 @@ EOF
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-INSTALL_DIR="${GROOT_INSTALL_DIR:-/usr/local/bin}"
+INSTALL_DIR="${GROOT_INSTALL_DIR:-}"
 INSTALL_DIR_EXPLICIT=0
 [[ -n "${GROOT_INSTALL_DIR:-}" ]] && INSTALL_DIR_EXPLICIT=1
 
@@ -91,9 +91,23 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-[[ -n "$INSTALL_DIR" ]] || die "install directory must not be empty"
-
 printf '%s%s◆ Groot toolchain installer%s\n' "$purple" "$bold" "$reset"
+
+# Prefer updating the `groot` that actually runs in this shell. Installing only
+# to /usr/local/bin leaves an older copy earlier on PATH shadowing the new one.
+FOUND_EXISTING=0
+if [[ "$INSTALL_DIR_EXPLICIT" -eq 0 ]]; then
+    existing_groot="$(command -v groot || true)"
+    if [[ -n "$existing_groot" ]]; then
+        FOUND_EXISTING=1
+        INSTALL_DIR="$(cd "$(dirname "$existing_groot")" && pwd)"
+        log "Existing groot found at $existing_groot; updating that installation."
+    else
+        INSTALL_DIR="/usr/local/bin"
+    fi
+fi
+
+[[ -n "$INSTALL_DIR" ]] || die "install directory must not be empty"
 
 # ---------------------------------------------------------------------------
 # Build
@@ -152,6 +166,10 @@ ensure_install_dir() {
         die "cannot write to $INSTALL_DIR (set GROOT_INSTALL_DIR or use --user)"
     fi
 
+    if [[ "$FOUND_EXISTING" -eq 1 ]]; then
+        die "cannot replace the existing groot at $existing_groot (permission denied). Re-run with sudo, or install elsewhere with --user / --install-dir."
+    fi
+
     INSTALL_DIR="$HOME/.local/bin"
     mkdir -p "$INSTALL_DIR"
     warn "No write access to /usr/local/bin; installing to $INSTALL_DIR instead."
@@ -207,6 +225,17 @@ trap - EXIT
 # Verify
 # ---------------------------------------------------------------------------
 
+find_path_copies() {
+    local name="$1" dir
+    local IFS=':'
+    for dir in $PATH; do
+        [[ -n "$dir" ]] || dir="."
+        if [[ -f "$dir/$name" && -x "$dir/$name" ]]; then
+            printf '%s\n' "$dir/$name"
+        fi
+    done | awk '!seen[$0]++'
+}
+
 printf '\n'
 "$INSTALL_DIR/groot" version || warn "installed groot failed to run"
 
@@ -218,6 +247,20 @@ elif [[ "$resolved" != "$INSTALL_DIR/groot" ]]; then
     warn "'groot' resolves to $resolved, not $INSTALL_DIR/groot."
     warn "Remove the stale binary or reorder your PATH."
 fi
+
+# Warn about older copies elsewhere on PATH (e.g. a legacy Rust build in
+# ~/.cargo/bin). They usually do not shadow the install above, but can in
+# shells or services with a different PATH order.
+for name in "${BINARIES[@]}"; do
+    other_copies="$(find_path_copies "$name" | grep -v -F -x "$INSTALL_DIR/$name" || true)"
+    if [[ -n "$other_copies" ]]; then
+        warn "Other '$name' copies are still on PATH:"
+        while IFS= read -r other; do
+            printf '       %s\n' "$other" >&2
+        done <<< "$other_copies"
+        warn "They can shadow this install if your PATH order changes; remove or replace them."
+    fi
+done
 
 if ! command -v ube >/dev/null 2>&1; then
     warn "'ube' was not found on PATH. 'groot start' needs the Ube compiler."
