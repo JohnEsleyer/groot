@@ -60,6 +60,22 @@ impl InputQueue {
         self.mouse_y = y;
     }
 
+    /// Bitmask of held mouse buttons (bit 0 = left, bit 1 = right, ...).
+    pub fn mouse_buttons_mask(&self) -> u8 {
+        let mut mask = 0u8;
+        for (i, &down) in self.mouse_down.iter().enumerate() {
+            if down && i < 8 {
+                mask |= 1 << i;
+            }
+        }
+        mask
+    }
+
+    /// Number of keys currently held down.
+    pub fn pressed_keys_count(&self) -> u8 {
+        self.keys_down.len().min(u8::MAX as usize) as u8
+    }
+
     #[allow(dead_code)]
     pub fn drain(&mut self) -> Vec<RawInputEvent> {
         self.events.drain(..).collect()

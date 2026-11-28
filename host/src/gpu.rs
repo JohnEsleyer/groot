@@ -4,19 +4,17 @@ use std::sync::Arc;
 use wgpu::util::DeviceExt;
 use wgpu::*;
 
-/// Number of `f32` values per Groot sprite vertex:
-/// `[x, y, u, v, r, g, b, a]`.
+/// Number of `f32` values per Groot sprite vertex: `[x, y, u, v, r, g, b, a]`.
 pub const FLOATS_PER_VERTEX: usize = 8;
 
-/// Floats per 3D mesh vertex:
-/// `[x, y, z, nx, ny, nz, u, v]` (8 floats = 32 bytes)
+/// Floats per 3D mesh vertex: `[x, y, z, nx, ny, nz, u, v]` (32 bytes).
 pub const FLOATS_PER_VERTEX3D: usize = 8;
 
-/// Floats per 3D instance:
-/// `Mat4` (16 floats) + optional tint (4 floats)
-/// If 16 floats: model matrix only, default tint (1,1,1,1).
-/// If 20 floats: model matrix + tint rgba.
+/// Floats per 3D instance: Mat4 (16 floats) + tint rgba (4 floats) = 20 floats.
 pub const FLOATS_PER_INSTANCE3D: usize = 20;
+
+/// 4x Multi-Sample Anti-Aliasing for crisp geometric edges.
+pub const SAMPLE_COUNT: u32 = 4;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -47,7 +45,7 @@ pub struct MeshData {
 pub struct InstanceBatch {
     pub mesh_id: u32,
     pub instance_count: u32,
-    pub instance_buffer: Buffer,
+    pub byte_offset: BufferAddress,
 }
 
 pub struct GpuRenderer {
@@ -57,24 +55,38 @@ pub struct GpuRenderer {
     queue: Option<Queue>,
     config: Option<SurfaceConfiguration>,
 
+    // Anti-Aliasing (MSAA) & Depth
+    msaa_texture: Option<Texture>,
+    msaa_view: Option<TextureView>,
+    depth_texture: Option<Texture>,
+    depth_view: Option<TextureView>,
+
     // 2D Pipeline
     pipeline: Option<RenderPipeline>,
     vertex_buffer: Option<Buffer>,
     vertex_buffer_capacity: usize,
-    vertex_count: u32,
+    pub vertex_count: u32,
     viewport_buffer: Option<Buffer>,
     bind_group: Option<BindGroup>,
 
     // 3D Pipeline
-    depth_texture: Option<Texture>,
-    depth_view: Option<TextureView>,
     pipeline_3d: Option<RenderPipeline>,
     camera_buffer_3d: Option<Buffer>,
     light_buffer_3d: Option<Buffer>,
     bind_group_3d: Option<BindGroup>,
     meshes: HashMap<u32, MeshData>,
     next_mesh_id: u32,
+
+    // Dynamic 3D instance buffer (zero allocation per frame)
+    instance_buffer_3d: Option<Buffer>,
+    instance_buffer_capacity_3d: usize,
+    instance_data_staging: Vec<f32>,
     pending_draws_3d: Vec<InstanceBatch>,
+
+    // Statistics for telemetry
+    pub stats_instances_3d: u32,
+    pub stats_triangles_rendered: u32,
+    pub stats_draw_calls: u16,
 
     pub clear_color: [f64; 4],
 }
@@ -91,26 +103,34 @@ impl GpuRenderer {
             device: None,
             queue: None,
             config: None,
+            msaa_texture: None,
+            msaa_view: None,
+            depth_texture: None,
+            depth_view: None,
             pipeline: None,
             vertex_buffer: None,
             vertex_buffer_capacity: 0,
             vertex_count: 0,
             viewport_buffer: None,
             bind_group: None,
-            depth_texture: None,
-            depth_view: None,
             pipeline_3d: None,
             camera_buffer_3d: None,
             light_buffer_3d: None,
             bind_group_3d: None,
             meshes: HashMap::new(),
             next_mesh_id: 1,
+            instance_buffer_3d: None,
+            instance_buffer_capacity_3d: 0,
+            instance_data_staging: Vec::with_capacity(2048),
             pending_draws_3d: Vec::new(),
+            stats_instances_3d: 0,
+            stats_triangles_rendered: 0,
+            stats_draw_calls: 0,
             clear_color: [0.06, 0.06, 0.09, 1.0],
         }
     }
 
-    pub fn init_surface<W>(&mut self, window: Arc<W>, width: u32, height: u32)
+    pub fn init_surface<W>(&mut self, window: Arc<W>, width: u32, height: u32, vsync: bool)
     where
         W: HasWindowHandle + HasDisplayHandle + Send + Sync + 'static,
     {
@@ -146,12 +166,18 @@ impl GpuRenderer {
 
         let width = width.max(1);
         let height = height.max(1);
+        let present_mode = if vsync {
+            PresentMode::Fifo
+        } else {
+            PresentMode::AutoNoVsync
+        };
+
         let config = SurfaceConfiguration {
             usage: TextureUsages::RENDER_ATTACHMENT,
             format,
             width,
             height,
-            present_mode: PresentMode::Fifo,
+            present_mode,
             alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
@@ -163,10 +189,33 @@ impl GpuRenderer {
         self.queue = Some(queue);
         self.config = Some(config);
 
+        self.create_msaa_framebuffer(width, height);
         self.create_depth_texture(width, height);
         self.create_pipeline();
         self.create_pipeline_3d();
         self.update_viewport();
+    }
+
+    fn create_msaa_framebuffer(&mut self, width: u32, height: u32) {
+        let (Some(device), Some(config)) = (self.device.as_ref(), self.config.as_ref()) else {
+            return;
+        };
+        let texture = device.create_texture(&TextureDescriptor {
+            label: Some("Groot MSAA Framebuffer"),
+            size: Extent3d {
+                width: width.max(1),
+                height: height.max(1),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: SAMPLE_COUNT,
+            dimension: TextureDimension::D2,
+            format: config.format,
+            usage: TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        self.msaa_view = Some(texture.create_view(&TextureViewDescriptor::default()));
+        self.msaa_texture = Some(texture);
     }
 
     fn create_depth_texture(&mut self, width: u32, height: u32) {
@@ -181,16 +230,15 @@ impl GpuRenderer {
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
-            sample_count: 1,
+            sample_count: SAMPLE_COUNT,
             dimension: TextureDimension::D2,
             format: TextureFormat::Depth32Float,
             usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         };
         let depth_texture = device.create_texture(&depth_desc);
-        let depth_view = depth_texture.create_view(&TextureViewDescriptor::default());
+        self.depth_view = Some(depth_texture.create_view(&TextureViewDescriptor::default()));
         self.depth_texture = Some(depth_texture);
-        self.depth_view = Some(depth_view);
     }
 
     fn create_pipeline(&mut self) {
@@ -201,19 +249,14 @@ impl GpuRenderer {
             label: Some("Groot Sprite Shader"),
             source: ShaderSource::Wgsl(
                 r#"
-                struct Viewport {
-                    size: vec4<f32>,
-                };
-
-                @group(0) @binding(0)
-                var<uniform> viewport: Viewport;
+                struct Viewport { size: vec4<f32> };
+                @group(0) @binding(0) var<uniform> viewport: Viewport;
 
                 struct VertexInput {
                     @location(0) position: vec2<f32>,
                     @location(1) uv: vec2<f32>,
                     @location(2) color: vec4<f32>,
                 };
-
                 struct VertexOutput {
                     @builtin(position) clip_position: vec4<f32>,
                     @location(0) uv: vec2<f32>,
@@ -269,21 +312,9 @@ impl GpuRenderer {
             array_stride: stride,
             step_mode: VertexStepMode::Vertex,
             attributes: &[
-                VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: VertexFormat::Float32x2,
-                },
-                VertexAttribute {
-                    offset: (2 * std::mem::size_of::<f32>()) as BufferAddress,
-                    shader_location: 1,
-                    format: VertexFormat::Float32x2,
-                },
-                VertexAttribute {
-                    offset: (4 * std::mem::size_of::<f32>()) as BufferAddress,
-                    shader_location: 2,
-                    format: VertexFormat::Float32x4,
-                },
+                VertexAttribute { offset: 0, shader_location: 0, format: VertexFormat::Float32x2 },
+                VertexAttribute { offset: (2 * std::mem::size_of::<f32>()) as BufferAddress, shader_location: 1, format: VertexFormat::Float32x2 },
+                VertexAttribute { offset: (4 * std::mem::size_of::<f32>()) as BufferAddress, shader_location: 2, format: VertexFormat::Float32x4 },
             ],
         };
 
@@ -313,11 +344,6 @@ impl GpuRenderer {
                 unclipped_depth: false,
                 conservative: false,
             },
-            // The combined render pass always has a Depth32Float attachment (created
-            // in `create_depth_texture`).  Every pipeline bound inside that pass must
-            // declare a matching depth-stencil format, even if it doesn't write depth.
-            // Without this the wgpu validation layer panics with
-            // "Render pipeline targets are incompatible with render pass".
             depth_stencil: Some(DepthStencilState {
                 format: TextureFormat::Depth32Float,
                 depth_write_enabled: false,
@@ -325,7 +351,11 @@ impl GpuRenderer {
                 stencil: StencilState::default(),
                 bias: DepthBiasState::default(),
             }),
-            multisample: MultisampleState::default(),
+            multisample: MultisampleState {
+                count: SAMPLE_COUNT,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
             multiview: None,
         });
 
@@ -361,7 +391,6 @@ impl GpuRenderer {
                     view_proj: mat4x4<f32>,
                     camera_pos: vec4<f32>,
                 };
-
                 struct LightUniform {
                     direction: vec4<f32>,
                     color: vec4<f32>,
@@ -412,8 +441,8 @@ impl GpuRenderer {
                 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
                     let light_dir = normalize(-light.direction.xyz);
                     let diff = max(dot(in.world_normal, light_dir), 0.0);
-                    let ambient = 0.2;
-                    let final_light = in.tint.rgb * (ambient + diff * 0.8 * light.color.rgb);
+                    let ambient = 0.22;
+                    let final_light = in.tint.rgb * (ambient + diff * 0.78 * light.color.rgb);
                     return vec4<f32>(final_light, in.tint.a);
                 }
             "#
@@ -457,21 +486,9 @@ impl GpuRenderer {
             array_stride: (FLOATS_PER_VERTEX3D * std::mem::size_of::<f32>()) as BufferAddress,
             step_mode: VertexStepMode::Vertex,
             attributes: &[
-                VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: VertexFormat::Float32x3,
-                },
-                VertexAttribute {
-                    offset: (3 * std::mem::size_of::<f32>()) as BufferAddress,
-                    shader_location: 1,
-                    format: VertexFormat::Float32x3,
-                },
-                VertexAttribute {
-                    offset: (6 * std::mem::size_of::<f32>()) as BufferAddress,
-                    shader_location: 2,
-                    format: VertexFormat::Float32x2,
-                },
+                VertexAttribute { offset: 0, shader_location: 0, format: VertexFormat::Float32x3 },
+                VertexAttribute { offset: (3 * std::mem::size_of::<f32>()) as BufferAddress, shader_location: 1, format: VertexFormat::Float32x3 },
+                VertexAttribute { offset: (6 * std::mem::size_of::<f32>()) as BufferAddress, shader_location: 2, format: VertexFormat::Float32x2 },
             ],
         };
 
@@ -479,31 +496,11 @@ impl GpuRenderer {
             array_stride: (FLOATS_PER_INSTANCE3D * std::mem::size_of::<f32>()) as BufferAddress,
             step_mode: VertexStepMode::Instance,
             attributes: &[
-                VertexAttribute {
-                    offset: 0,
-                    shader_location: 3,
-                    format: VertexFormat::Float32x4,
-                },
-                VertexAttribute {
-                    offset: (4 * std::mem::size_of::<f32>()) as BufferAddress,
-                    shader_location: 4,
-                    format: VertexFormat::Float32x4,
-                },
-                VertexAttribute {
-                    offset: (8 * std::mem::size_of::<f32>()) as BufferAddress,
-                    shader_location: 5,
-                    format: VertexFormat::Float32x4,
-                },
-                VertexAttribute {
-                    offset: (12 * std::mem::size_of::<f32>()) as BufferAddress,
-                    shader_location: 6,
-                    format: VertexFormat::Float32x4,
-                },
-                VertexAttribute {
-                    offset: (16 * std::mem::size_of::<f32>()) as BufferAddress,
-                    shader_location: 7,
-                    format: VertexFormat::Float32x4,
-                },
+                VertexAttribute { offset: 0, shader_location: 3, format: VertexFormat::Float32x4 },
+                VertexAttribute { offset: (4 * std::mem::size_of::<f32>()) as BufferAddress, shader_location: 4, format: VertexFormat::Float32x4 },
+                VertexAttribute { offset: (8 * std::mem::size_of::<f32>()) as BufferAddress, shader_location: 5, format: VertexFormat::Float32x4 },
+                VertexAttribute { offset: (12 * std::mem::size_of::<f32>()) as BufferAddress, shader_location: 6, format: VertexFormat::Float32x4 },
+                VertexAttribute { offset: (16 * std::mem::size_of::<f32>()) as BufferAddress, shader_location: 7, format: VertexFormat::Float32x4 },
             ],
         };
 
@@ -540,7 +537,11 @@ impl GpuRenderer {
                 stencil: StencilState::default(),
                 bias: DepthBiasState::default(),
             }),
-            multisample: MultisampleState::default(),
+            multisample: MultisampleState {
+                count: SAMPLE_COUNT,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
             multiview: None,
         });
 
@@ -616,6 +617,7 @@ impl GpuRenderer {
         config.width = width;
         config.height = height;
         surface.configure(device, config);
+        self.create_msaa_framebuffer(width, height);
         self.create_depth_texture(width, height);
         self.update_viewport();
     }
@@ -722,41 +724,31 @@ impl GpuRenderer {
     }
 
     pub fn draw_instances_3d(&mut self, mesh_id: u32, instance_data: &[f32]) {
-        let Some(device) = self.device.as_ref() else {
-            return;
-        };
         if instance_data.is_empty() || !self.meshes.contains_key(&mesh_id) {
             return;
         }
 
-        // Each instance can be 16 floats (Mat4) or 20 floats (Mat4 + tint)
-        let (instance_count, packed_data) = if instance_data.len() % 20 == 0 {
-            (
-                (instance_data.len() / 20) as u32,
-                instance_data.to_vec(),
-            )
+        let (instance_count, start_offset) = if instance_data.len() % 20 == 0 {
+            let count = (instance_data.len() / 20) as u32;
+            let offset = (self.instance_data_staging.len() * std::mem::size_of::<f32>()) as BufferAddress;
+            self.instance_data_staging.extend_from_slice(instance_data);
+            (count, offset)
         } else if instance_data.len() % 16 == 0 {
-            let count = instance_data.len() / 16;
-            let mut packed = Vec::with_capacity(count * 20);
-            for i in 0..count {
-                packed.extend_from_slice(&instance_data[i * 16..(i + 1) * 16]);
-                packed.extend_from_slice(&[1.0, 1.0, 1.0, 1.0]); // default tint
+            let count = (instance_data.len() / 16) as u32;
+            let offset = (self.instance_data_staging.len() * std::mem::size_of::<f32>()) as BufferAddress;
+            for i in 0..count as usize {
+                self.instance_data_staging.extend_from_slice(&instance_data[i * 16..(i + 1) * 16]);
+                self.instance_data_staging.extend_from_slice(&[1.0, 1.0, 1.0, 1.0]);
             }
-            (count as u32, packed)
+            (count, offset)
         } else {
             return;
         };
 
-        let instance_buffer = device.create_buffer_init(&util::BufferInitDescriptor {
-            label: Some("Groot 3D Instance Buffer"),
-            contents: bytemuck::cast_slice(&packed_data),
-            usage: BufferUsages::VERTEX,
-        });
-
         self.pending_draws_3d.push(InstanceBatch {
             mesh_id,
             instance_count,
-            instance_buffer,
+            byte_offset: start_offset,
         });
     }
 
@@ -768,10 +760,11 @@ impl GpuRenderer {
         b: f64,
         a: f64,
     ) {
-        let (Some(surface), Some(device), Some(queue)) = (
+        let (Some(surface), Some(device), Some(queue), Some(msaa_view)) = (
             self.surface.as_ref(),
             self.device.as_ref(),
             self.queue.as_ref(),
+            self.msaa_view.as_ref(),
         ) else {
             return;
         };
@@ -779,23 +772,47 @@ impl GpuRenderer {
         let output = match surface.get_current_texture() {
             Ok(tex) => tex,
             Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
-                // Immediately reconfigure the surface so rendering never hangs!
                 if let (Some(device), Some(config)) = (self.device.as_ref(), self.config.as_ref()) {
                     surface.configure(device, config);
                 }
+                if let Some(config) = self.config.as_ref() {
+                    let (width, height) = (config.width, config.height);
+                    self.create_msaa_framebuffer(width, height);
+                    self.create_depth_texture(width, height);
+                }
                 return;
             }
-            Err(wgpu::SurfaceError::Timeout) => {
-                // Skip frame if timeout occurs, next frame will retry
-                return;
-            }
+            Err(wgpu::SurfaceError::Timeout) => return,
             Err(_) => return,
         };
         let view = output.texture.create_view(&TextureViewDescriptor::default());
 
+        // Zero-allocation batch instance buffer sync
+        if !self.instance_data_staging.is_empty() {
+            let byte_len = self.instance_data_staging.len() * std::mem::size_of::<f32>();
+            if self.instance_buffer_3d.is_none() || byte_len > self.instance_buffer_capacity_3d {
+                let new_cap = byte_len.max(4096).next_power_of_two();
+                let buffer = device.create_buffer(&BufferDescriptor {
+                    label: Some("Groot Dynamic 3D Instance Buffer"),
+                    size: new_cap as u64,
+                    usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                self.instance_buffer_3d = Some(buffer);
+                self.instance_buffer_capacity_3d = new_cap;
+            }
+            if let Some(buf) = self.instance_buffer_3d.as_ref() {
+                queue.write_buffer(buf, 0, bytemuck::cast_slice(&self.instance_data_staging));
+            }
+        }
+
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
             label: Some("Groot Frame Encoder"),
         });
+
+        let mut instances_rendered = 0u32;
+        let mut triangles_rendered = vertex_count_2d / 3;
+        let mut draw_calls = 0u16;
 
         {
             let depth_attachment = self.depth_view.as_ref().map(|dview| {
@@ -803,20 +820,20 @@ impl GpuRenderer {
                     view: dview,
                     depth_ops: Some(Operations {
                         load: LoadOp::Clear(1.0),
-                        store: StoreOp::Store,
+                        store: StoreOp::Discard,
                     }),
                     stencil_ops: None,
                 }
             });
 
             let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Groot Combined Render Pass"),
+                label: Some("Groot Combined MSAA Render Pass"),
                 color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
+                    view: msaa_view,
+                    resolve_target: Some(&view),
                     ops: Operations {
                         load: LoadOp::Clear(Color { r, g, b, a }),
-                        store: StoreOp::Store,
+                        store: StoreOp::Discard,
                     },
                 })],
                 depth_stencil_attachment: depth_attachment,
@@ -824,26 +841,31 @@ impl GpuRenderer {
                 occlusion_query_set: None,
             });
 
-            // 1. Render 3D instances first (with depth testing & writing)
+            // 1. Render 3D instances first with 4x MSAA & depth testing
             if !self.pending_draws_3d.is_empty() {
-                if let (Some(pipeline_3d), Some(bind_group_3d)) =
-                    (self.pipeline_3d.as_ref(), self.bind_group_3d.as_ref())
-                {
+                if let (Some(pipeline_3d), Some(bind_group_3d), Some(instance_buf)) = (
+                    self.pipeline_3d.as_ref(),
+                    self.bind_group_3d.as_ref(),
+                    self.instance_buffer_3d.as_ref(),
+                ) {
                     pass.set_pipeline(pipeline_3d);
                     pass.set_bind_group(0, bind_group_3d, &[]);
 
                     for batch in &self.pending_draws_3d {
                         if let Some(mesh) = self.meshes.get(&batch.mesh_id) {
                             pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-                            pass.set_vertex_buffer(1, batch.instance_buffer.slice(..));
+                            pass.set_vertex_buffer(1, instance_buf.slice(batch.byte_offset..));
                             pass.set_index_buffer(mesh.index_buffer.slice(..), IndexFormat::Uint32);
                             pass.draw_indexed(0..mesh.index_count, 0, 0..batch.instance_count);
+                            instances_rendered += batch.instance_count;
+                            triangles_rendered += batch.instance_count * (mesh.index_count / 3);
+                            draw_calls += 1;
                         }
                     }
                 }
             }
 
-            // 2. Render 2D sprites on top
+            // 2. Render 2D sprites on top with 4x MSAA
             if vertex_count_2d > 0 {
                 if let (Some(pipeline), Some(bind_group), Some(vb)) = (
                     self.pipeline.as_ref(),
@@ -854,13 +876,19 @@ impl GpuRenderer {
                     pass.set_bind_group(0, bind_group, &[]);
                     pass.set_vertex_buffer(0, vb.slice(..));
                     pass.draw(0..vertex_count_2d, 0..1);
+                    draw_calls += 1;
                 }
             }
         }
 
         queue.submit(std::iter::once(encoder.finish()));
         self.pending_draws_3d.clear();
+        self.instance_data_staging.clear();
         output.present();
+
+        self.stats_instances_3d = instances_rendered;
+        self.stats_triangles_rendered = triangles_rendered;
+        self.stats_draw_calls = draw_calls;
     }
 
     pub fn draw_frame(&mut self, r: f64, g: f64, b: f64) {

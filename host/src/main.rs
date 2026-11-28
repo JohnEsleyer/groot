@@ -34,6 +34,7 @@ struct HostState {
     frame_interval: Duration,
     next_frame: Option<Instant>,
     close_requested: bool,
+    vsync: bool,
     // --- Telemetry (debug mode only) ---
     telemetry: Option<TelemetryServer>,
     frame_index: u64,
@@ -120,6 +121,71 @@ impl HostState {
             true
         }
     }
+
+    fn present_frame(&mut self, r: f64, g: f64, b: f64) {
+        let _ = self.pump_window_events();
+        if self.close_requested {
+            std::process::exit(0);
+        }
+
+        let now = Instant::now();
+        let frame_time_us = self
+            .frame_start
+            .map(|s| s.elapsed().as_micros() as u32)
+            .unwrap_or(16_666);
+        self.frame_start = Some(now);
+
+        // Frame Pacing:
+        // When VSync is enabled (Fifo), the GPU driver presentation queue handles
+        // vertical retrace synchronization with hardware precision. Sleeping on
+        // top of Fifo causes missed vblanks and severe microstutter.
+        // Only sleep if VSync is disabled.
+        if !self.vsync {
+            if let Some(target) = self.next_frame {
+                if target > now {
+                    std::thread::sleep(target - now);
+                }
+                self.next_frame = Some(target + self.frame_interval);
+            } else {
+                self.next_frame = Some(now + self.frame_interval);
+            }
+        }
+
+        self.gpu.draw_frame(r, g, b);
+
+        if let Some(win) = self.window_mgr.window() {
+            win.request_redraw();
+        }
+
+        // Publish live frame telemetry
+        self.frame_index += 1;
+        if let Some(ref telem) = self.telemetry {
+            let fps = if frame_time_us > 0 {
+                1_000_000.0 / frame_time_us as f32
+            } else {
+                60.0
+            };
+            let (mouse_x, mouse_y, mouse_mask, keys_count) = {
+                let q = self.inputs.lock().unwrap();
+                (q.mouse_x, q.mouse_y, q.mouse_buttons_mask(), q.pressed_keys_count())
+            };
+            telem.publish(TelemetryPacket {
+                frame_index: self.frame_index,
+                frame_time_us,
+                fps,
+                quads_rendered: self.gpu.vertex_count / 6,
+                triangles_rendered: self.gpu.stats_triangles_rendered,
+                instances_3d: self.gpu.stats_instances_3d,
+                vertex_buffer_bytes: (self.gpu.vertex_count * 8 * 4) + (self.gpu.stats_instances_3d * 20 * 4),
+                draw_calls: self.gpu.stats_draw_calls,
+                mouse_x,
+                mouse_y,
+                mouse_buttons_mask: mouse_mask,
+                pressed_keys_count: keys_count,
+                ..Default::default()
+            });
+        }
+    }
 }
 
 impl WasiView for HostState {
@@ -145,7 +211,7 @@ impl ube::graphics::window::Host for HostState {
         self.window_mgr
             .create_window(el, width, height, &title, true);
         if let Some(win) = self.window_mgr.window() {
-            self.gpu.init_surface(win, width, height);
+            self.gpu.init_surface(win, width, height, self.vsync);
         }
     }
 }
@@ -192,54 +258,7 @@ impl ube::graphics::gpu::Host for HostState {
     }
 
     fn draw_frame(&mut self, r: f64, g: f64, b: f64) {
-        let _ = self.pump_window_events();
-        if self.close_requested {
-            std::process::exit(0);
-        }
-
-        let now = Instant::now();
-        let frame_time_us = self
-            .frame_start
-            .map(|s| s.elapsed().as_micros() as u32)
-            .unwrap_or(16_666);
-        self.frame_start = Some(now);
-
-        if let Some(target) = self.next_frame {
-            if target > now {
-                std::thread::sleep(target - now);
-            }
-        }
-        self.next_frame = Some(Instant::now() + self.frame_interval);
-
-        self.gpu.draw_frame(r, g, b);
-
-        if let Some(win) = self.window_mgr.window() {
-            win.request_redraw();
-        }
-
-        // Publish telemetry in debug mode.
-        self.frame_index += 1;
-        if let Some(ref telem) = self.telemetry {
-            let fps = if frame_time_us > 0 {
-                1_000_000.0 / frame_time_us as f32
-            } else {
-                60.0
-            };
-            let (mouse_x, mouse_y, mouse_mask, keys_count) = {
-                let q = self.inputs.lock().unwrap();
-                (q.mouse_x, q.mouse_y, q.mouse_buttons_mask(), q.pressed_keys_count())
-            };
-            telem.publish(TelemetryPacket {
-                frame_index: self.frame_index,
-                frame_time_us,
-                fps,
-                mouse_x,
-                mouse_y,
-                mouse_buttons_mask: mouse_mask,
-                pressed_keys_count: keys_count,
-                ..Default::default()
-            });
-        }
+        self.present_frame(r, g, b);
     }
 }
 
@@ -265,24 +284,7 @@ impl ube::graphics::gpu3d::Host for HostState {
     }
 
     fn draw_frame(&mut self, clear_r: f64, clear_g: f64, clear_b: f64) {
-        let _ = self.pump_window_events();
-        if self.close_requested {
-            std::process::exit(0);
-        }
-
-        let now = Instant::now();
-        if let Some(target) = self.next_frame {
-            if target > now {
-                std::thread::sleep(target - now);
-            }
-        }
-        self.next_frame = Some(Instant::now() + self.frame_interval);
-
-        self.gpu.draw_frame(clear_r, clear_g, clear_b);
-
-        if let Some(win) = self.window_mgr.window() {
-            win.request_redraw();
-        }
+        self.present_frame(clear_r, clear_g, clear_b);
     }
 }
 
@@ -352,6 +354,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let manifest_title  = env::var("GROOT_TITLE")
         .unwrap_or_else(|_| "Groot Game".into());
 
+    let vsync = env::var("GROOT_VSYNC")
+        .map(|v| v != "false" && v != "0")
+        .unwrap_or(true);
+
     let mut store = Store::new(
         &engine,
         HostState {
@@ -364,6 +370,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             frame_interval,
             next_frame: None,
             close_requested: false,
+            vsync,
             telemetry,
             frame_index: 0,
             frame_start: None,
