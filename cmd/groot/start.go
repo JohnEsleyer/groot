@@ -138,8 +138,6 @@ func compileProject(m *GrootManifest, release bool) (string, error) {
 	compileStart := time.Now()
 	cmd := exec.Command(ubeBin, compileArgs...)
 	cmd.Dir = m.Dir
-	// Pass GROOT_PKG_ROOT so the compiler can resolve groot/* imports.
-	cmd.Env = append(os.Environ(), "GROOT_PKG_ROOT="+grootPkgRoot(m.Dir))
 	out, err := cmd.CombinedOutput()
 	stopAnim()
 

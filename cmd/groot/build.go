@@ -88,7 +88,6 @@ func runBuild(args []string) error {
 	start := time.Now()
 	cmd := exec.Command(ubeBin, compileArgs...)
 	cmd.Dir = manifest.Dir
-	cmd.Env = append(os.Environ(), "GROOT_PKG_ROOT="+grootPkgRoot(manifest.Dir))
 	out, err := cmd.CombinedOutput()
 	stopAnim()
 

@@ -2,11 +2,11 @@ package main
 
 // 04 — Generational ECS: Demonstrating zero-GC entity lifecycles using Pool[Entity]
 
-import "groot/app" as app
-import "groot/ecs" as ecs
-import "groot/math" as math
-import "groot/color" as color
-import "groot/input" as input
+import "github.com/JohnEsleyer/groot/app" as app
+import "github.com/JohnEsleyer/groot/ecs" as ecs
+import "github.com/JohnEsleyer/groot/math" as math
+import "github.com/JohnEsleyer/groot/color" as color
+import "github.com/JohnEsleyer/groot/input" as input
 
 fn main() {
     let mut game = app::app_new(app::EngineConfig{

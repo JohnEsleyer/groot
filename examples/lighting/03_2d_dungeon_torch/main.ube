@@ -1,11 +1,11 @@
 package main
 
-import "groot/app" as app
-import "groot/color" as color
-import "groot/render" as render
-import "groot/input" as input
-import "groot/platform" as platform
-import "groot/math" as math
+import "github.com/JohnEsleyer/groot/app" as app
+import "github.com/JohnEsleyer/groot/color" as color
+import "github.com/JohnEsleyer/groot/render" as render
+import "github.com/JohnEsleyer/groot/input" as input
+import "github.com/JohnEsleyer/groot/platform" as platform
+import "github.com/JohnEsleyer/groot/math" as math
 
 struct TorchBearer {
     x: f32,

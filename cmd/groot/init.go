@@ -106,7 +106,7 @@ func templateSource(name, tmpl string) string {
 	case "empty":
 		return fmt.Sprintf(`package main
 
-import "groot/app"
+import "github.com/JohnEsleyer/groot/app"
 
 fn main() {
     let mut game = app::app_new_from_manifest()
@@ -123,9 +123,9 @@ fn main() {
 	case "3d":
 		return fmt.Sprintf(`package main
 
-import "groot/app"
-import "groot/color"
-import "groot/math"
+import "github.com/JohnEsleyer/groot/app"
+import "github.com/JohnEsleyer/groot/color"
+import "github.com/JohnEsleyer/groot/math"
 
 fn main() {
     let mut game = app::app_new_from_manifest()
@@ -143,12 +143,12 @@ fn main() {
 	default: // "2d"
 		return fmt.Sprintf(`package main
 
-import "groot/app"
-import "groot/color"
-import "groot/input"
+import "github.com/JohnEsleyer/groot/app"
+import "github.com/JohnEsleyer/groot/color"
+import "github.com/JohnEsleyer/groot/input"
 
 fn main() {
-    // Reads window title, size, and FPS from groot.mod automatically.
+    // Reads window title, size, and FPS from ube.mod / groot.toml automatically.
     let mut game = app::app_new_from_manifest()
     game.start()
 
@@ -168,6 +168,6 @@ fn main() {
         }
     }
 }
-`, name)
+`)
 	}
 }

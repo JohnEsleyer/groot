@@ -1,12 +1,12 @@
 package main
 
-import "groot/app" as app
-import "groot/math" as math
-import "groot/render3d" as render3d
-import "groot/platform3d" as platform3d
-import "groot/color" as color
-import "groot/input" as input
-import "groot/trace" as trace
+import "github.com/JohnEsleyer/groot/app" as app
+import "github.com/JohnEsleyer/groot/math" as math
+import "github.com/JohnEsleyer/groot/render3d" as render3d
+import "github.com/JohnEsleyer/groot/platform3d" as platform3d
+import "github.com/JohnEsleyer/groot/color" as color
+import "github.com/JohnEsleyer/groot/input" as input
+import "github.com/JohnEsleyer/groot/trace" as trace
 
 struct Pedestal {
     x: f32,
