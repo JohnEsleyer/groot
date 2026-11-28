@@ -85,18 +85,24 @@ while game.is_running {
 
 ### Build the Groot toolchain
 
-From the parent `ube` repository root:
+From this `_groot` directory:
 
 ```bash
-make groot-tools
+make tools
 ```
 
 This builds `bin/groot`, `bin/groot-host`, and `bin/groot-monitor` (the ratatui live telemetry TUI).
 
+To build and install the toolchain on your `PATH`:
+
+```bash
+./install.sh
+```
+
 ### Run an example with `groot`
 
 ```bash
-cd _groot/examples/01_bunnymark
+cd examples/01_bunnymark
 
 # Build and run in debug mode (default, with live telemetry IPC)
 groot start .

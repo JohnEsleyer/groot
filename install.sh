@@ -6,10 +6,10 @@
 # installs all three into a directory on your PATH (default: /usr/local/bin).
 #
 # Usage:
-#   ./_groot/install.sh                 # build + install (system-wide)
-#   ./_groot/install.sh --user          # install to ~/.local/bin
-#   ./_groot/install.sh --no-build      # install existing bin/ artifacts
-#   ./_groot/install.sh --install-dir D # install into D
+#   ./install.sh                 # build + install (system-wide)
+#   ./install.sh --user          # install to ~/.local/bin
+#   ./install.sh --no-build      # install existing bin/ artifacts
+#   ./install.sh --install-dir D # install into D
 #
 # Environment:
 #   GROOT_INSTALL_DIR   Destination directory (same as --install-dir).
@@ -52,7 +52,7 @@ EOF
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+GROOT_ROOT="$SCRIPT_DIR"
 
 INSTALL_DIR="${GROOT_INSTALL_DIR:-}"
 INSTALL_DIR_EXPLICIT=0
@@ -121,22 +121,22 @@ if [[ "$DO_BUILD" -eq 1 ]]; then
 
     log "Building groot, groot-host, and groot-monitor (release)..."
     if command -v make >/dev/null 2>&1; then
-        (cd "$REPO_ROOT" && make groot-tools)
+        make -C "$GROOT_ROOT" tools
     else
-        # No make available: replicate the Makefile's groot-tools target.
-        mkdir -p "$REPO_ROOT/bin"
-        (cd "$REPO_ROOT" && go build -trimpath -ldflags='-s -w' -o bin/groot ./cmd/groot)
-        (cd "$REPO_ROOT/_groot" && cargo build --release --package groot-host --package groot-monitor)
-        cp "$REPO_ROOT/_groot/target/release/groot-host"    "$REPO_ROOT/bin/groot-host"
-        cp "$REPO_ROOT/_groot/target/release/groot-monitor" "$REPO_ROOT/bin/groot-monitor"
+        # No make available: replicate the Makefile's tools target.
+        mkdir -p "$GROOT_ROOT/bin"
+        (cd "$GROOT_ROOT" && go build -trimpath -ldflags='-s -w' -o bin/groot ./cmd/groot)
+        (cd "$GROOT_ROOT" && cargo build --release --package groot-host --package groot-monitor)
+        cp "$GROOT_ROOT/target/release/groot-host"    "$GROOT_ROOT/bin/groot-host"
+        cp "$GROOT_ROOT/target/release/groot-monitor" "$GROOT_ROOT/bin/groot-monitor"
     fi
 fi
 
 BINARIES=(groot groot-host groot-monitor)
 for bin in "${BINARIES[@]}"; do
-    [[ -f "$REPO_ROOT/bin/$bin" ]] \
-        || die "missing $REPO_ROOT/bin/$bin (run without --no-build to build it)"
-    [[ -x "$REPO_ROOT/bin/$bin" ]] || chmod 0755 "$REPO_ROOT/bin/$bin"
+    [[ -f "$GROOT_ROOT/bin/$bin" ]] \
+        || die "missing $GROOT_ROOT/bin/$bin (run without --no-build to build it)"
+    [[ -x "$GROOT_ROOT/bin/$bin" ]] || chmod 0755 "$GROOT_ROOT/bin/$bin"
 done
 
 # ---------------------------------------------------------------------------
@@ -198,7 +198,7 @@ trap cleanup EXIT
 
 install_binary() {
     local name="$1"
-    local src="$REPO_ROOT/bin/$name"
+    local src="$GROOT_ROOT/bin/$name"
     local dest="$INSTALL_DIR/$name"
     local tmp="$INSTALL_DIR/.${name}.install.$$.$RANDOM"
 
