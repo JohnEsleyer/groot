@@ -43,11 +43,10 @@ pub fn app_new(cfg: EngineConfig) -> App {
 pub fn app_new_from_manifest() -> App {
     let w = platform::manifest_width()
     let h = platform::manifest_height()
-    let title = platform::manifest_title()
     let cfg = EngineConfig{
         width:  w,
         height: h,
-        title:  move title
+        title:  "Groot Game"
     }
     return App{
         config:     move cfg,

@@ -243,9 +243,6 @@ impl ube::graphics::manifest::Host for HostState {
     fn manifest_height(&mut self) -> u32 {
         self.manifest_height
     }
-    fn manifest_title(&mut self) -> String {
-        self.manifest_title.clone()
-    }
 }
 
 impl ube::graphics::gpu::Host for HostState {

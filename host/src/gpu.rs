@@ -772,11 +772,13 @@ impl GpuRenderer {
         let output = match surface.get_current_texture() {
             Ok(tex) => tex,
             Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
-                if let (Some(device), Some(config)) = (self.device.as_ref(), self.config.as_ref()) {
+                let size = if let (Some(device), Some(config)) = (self.device.as_ref(), self.config.as_ref()) {
                     surface.configure(device, config);
-                }
-                if let Some(config) = self.config.as_ref() {
-                    let (width, height) = (config.width, config.height);
+                    Some((config.width, config.height))
+                } else {
+                    None
+                };
+                if let Some((width, height)) = size {
                     self.create_msaa_framebuffer(width, height);
                     self.create_depth_texture(width, height);
                 }

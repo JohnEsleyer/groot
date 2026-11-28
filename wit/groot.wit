@@ -30,12 +30,11 @@ interface input {
 }
 
 /// Manifest ABI — host exposes project configuration from groot.toml so that
-/// app_new_from_manifest() can read window dimensions and title at runtime
+/// app_new_from_manifest() can read window dimensions at runtime
 /// without baking them into the .wasm binary.
 interface manifest {
     manifest-width:  func() -> u32;
     manifest-height: func() -> u32;
-    manifest-title:  func() -> string;
 }
 
 world groot-runner {
