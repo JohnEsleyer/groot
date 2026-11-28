@@ -78,6 +78,54 @@ func discoverSession(pid int) (*GrootSession, error) {
 	return &session, nil
 }
 
+// launchMonitorWindow launches groot-monitor in a new terminal window if available,
+// or spawns `groot monitor` in a separate process so it doesn't fight the game process for stdin/stdout.
+func launchMonitorWindow() error {
+	session, err := discoverSession(0)
+	if err != nil {
+		return err
+	}
+
+	monitorBin, err := findMonitorBin()
+	if err != nil {
+		return runBuiltinMonitor(session)
+	}
+
+	args := []string{
+		"--socket=" + session.SocketPath,
+		"--project=" + session.ProjectName,
+		"--pid=" + strconv.Itoa(session.PID),
+	}
+
+	// Try spawning in a new terminal window
+	terminals := []struct {
+		bin  string
+		args []string
+	}{
+		{"x-terminal-emulator", append([]string{"-e", monitorBin}, args...)},
+		{"gnome-terminal", append([]string{"--", monitorBin}, args...)},
+		{"alacritty", append([]string{"-e", monitorBin}, args...)},
+		{"kitty", append([]string{monitorBin}, args...)},
+		{"xterm", append([]string{"-e", monitorBin}, args...)},
+	}
+
+	for _, t := range terminals {
+		if path, err := exec.LookPath(t.bin); err == nil {
+			cmd := exec.Command(path, t.args...)
+			if err := cmd.Start(); err == nil {
+				return nil
+			}
+		}
+	}
+
+	fmt.Printf("\n%s %s: run %s in another terminal tab/window\n",
+		paint("◆", colorPurpleBold),
+		paint("Groot Monitor", colorPurple),
+		paint("groot monitor", colorDim),
+	)
+	return nil
+}
+
 // launchMonitorTUI starts the monitor for a discovered active session.
 func launchMonitorTUI() error {
 	session, err := discoverSession(0)

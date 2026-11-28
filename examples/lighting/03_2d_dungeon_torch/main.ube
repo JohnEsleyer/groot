@@ -1,0 +1,128 @@
+package main
+
+import "groot/app" as app
+import "groot/color" as color
+import "groot/render" as render
+import "groot/input" as input
+import "groot/platform" as platform
+import "groot/math" as math
+
+struct TorchBearer {
+    x: f32,
+    y: f32,
+    vx: f32,
+    vy: f32
+}
+
+fn sqrt_approx(val: f32) -> f32 {
+    if val <= 0.0 { return 0.0 }
+    let mut g = val * 0.5
+    let mut i = 0
+    while i < 8 {
+        g = 0.5 * (g + val / g)
+        i += 1
+    }
+    return g
+}
+
+fn main() {
+    platform::open_window(960, 640, "Groot Lighting — 2D Dungeon Torch")
+
+    let mut bearer = TorchBearer{
+        x: 480.0,
+        y: 320.0,
+        vx: 0.0,
+        vy: 0.0
+    }
+
+    let mut controls = input::manager_new()
+    let mut time: f32 = 0.0
+
+    while true {
+        controls.begin_frame()
+        controls.update_from_host()
+
+        if controls.is_key_pressed(input::key_escape()) {
+            break
+        }
+
+        // Movement controls
+        bearer.vx = 0.0
+        bearer.vy = 0.0
+        if controls.is_key_down(input::key_left()) || controls.is_key_down(input::key_a()) {
+            bearer.vx -= 260.0
+        }
+        if controls.is_key_down(input::key_right()) || controls.is_key_down(input::key_d()) {
+            bearer.vx += 260.0
+        }
+        if controls.is_key_down(input::key_up()) || controls.is_key_down(input::key_w()) {
+            bearer.vy -= 260.0
+        }
+        if controls.is_key_down(input::key_down()) || controls.is_key_down(input::key_s()) {
+            bearer.vy += 260.0
+        }
+
+        let dt = 0.016666
+        time += dt
+        bearer.x += bearer.vx * dt
+        bearer.y += bearer.vy * dt
+
+        // Keep inside room bounds
+        if bearer.x < 32.0 { bearer.x = 32.0 }
+        if bearer.x > 928.0 { bearer.x = 928.0 }
+        if bearer.y < 32.0 { bearer.y = 32.0 }
+        if bearer.y > 608.0 { bearer.y = 608.0 }
+
+        // Flame flicker animation: combine 2 high-frequency sines
+        let flicker = math::sin(time * 16.0) * 12.0 + math::sin(time * 33.0) * 6.0
+        let torch_radius = 260.0 + flicker
+
+        arena {
+            let mut batch = render::batcher_new(650)
+
+            // Render 30x20 tile floor (32x32 per tile)
+            let mut gy = 0
+            while gy < 20 {
+                let mut gx = 0
+                while gx < 30 {
+                    let tile_x = (gx as f32) * 32.0
+                    let tile_y = (gy as f32) * 32.0
+                    let center_x = tile_x + 16.0
+                    let center_y = tile_y + 16.0
+
+                    // Calculate distance to torch
+                    let dx = center_x - bearer.x
+                    let dy = center_y - bearer.y
+                    let dist = sqrt_approx(dx * dx + dy * dy)
+
+                    // Quadratic radial falloff
+                    let norm_dist = dist / torch_radius
+                    let att = if norm_dist < 1.0 { 1.0 - norm_dist * norm_dist } else { 0.0 }
+
+                    // Base tile checker pattern
+                    let is_alt = (gx + gy) % 2 == 0
+                    let base_gray = if is_alt { 0.38 } else { 0.30 }
+
+                    // Ambient darkness + torch light blend
+                    let amb_r = 0.03
+                    let amb_g = 0.04
+                    let amb_b = 0.08
+
+                    let lit_r = amb_r + att * 1.0 * base_gray
+                    let lit_g = amb_g + att * 0.72 * base_gray
+                    let lit_b = amb_b + att * 0.35 * base_gray
+
+                    batch.draw_rect_rgba(tile_x, tile_y, 31.0, 31.0, lit_r, lit_g, lit_b, 1.0)
+                    gx += 1
+                }
+                gy += 1
+            }
+
+            // Draw player / torch center
+            batch.draw_rect_rgba(bearer.x - 8.0, bearer.y - 8.0, 16.0, 16.0, 1.0, 0.9, 0.3, 1.0)
+
+            platform::submit(batch.vertices)
+            platform::present(0.02, 0.02, 0.04)
+        }
+    }
+}

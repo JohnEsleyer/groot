@@ -195,7 +195,7 @@ fn spawn_receiver(socket_path: String) -> Receiver<SocketMsg> {
                             let kind = header[0];
                             let len = u16::from_le_bytes([header[1], header[2]]) as usize;
                             match kind {
-                                MSG_PACKET if len == 0 => {
+                                MSG_PACKET => {
                                     // 128-byte fixed packet
                                     let mut buf = [0u8; 128];
                                     if reader.read_exact(&mut buf).is_ok() {
@@ -359,6 +359,14 @@ impl App {
 // Main
 // ---------------------------------------------------------------------------
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Install panic hook to always restore terminal state on abnormal exit
+    let default_panic = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = disable_raw_mode();
+        let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
+        default_panic(info);
+    }));
+
     let args: Vec<String> = std::env::args().collect();
     let socket_override = args.iter().find_map(|a| a.strip_prefix("--socket="));
 

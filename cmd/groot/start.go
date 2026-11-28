@@ -86,12 +86,12 @@ func runStart(args []string) error {
 		return err
 	}
 
-	// Step 2: If --monitor flag, launch TUI in background before the host.
+	// Step 2: If --monitor flag, launch TUI in a dedicated terminal window.
 	if opts.Monitor && !opts.Release {
 		go func() {
-			// Small delay so the host socket is ready.
-			time.Sleep(300 * time.Millisecond)
-			_ = launchMonitorTUI()
+			// Small delay so the host process has started and written /tmp/groot-active.json
+			time.Sleep(500 * time.Millisecond)
+			_ = launchMonitorWindow()
 		}()
 	}
 
@@ -187,8 +187,11 @@ func launchHost(m *GrootManifest, wasmPath string, fps int, mode string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	// Write session file for `groot monitor` to discover.
-	pid := os.Getpid() // will be overwritten with child pid after Start
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	pid := cmd.Process.Pid
 	session := map[string]interface{}{
 		"project_name": m.Name,
 		"title":        m.Title,
@@ -202,7 +205,7 @@ func launchHost(m *GrootManifest, wasmPath string, fps int, mode string) error {
 	}
 	defer func() { _ = os.Remove("/tmp/groot-active.json") }()
 
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Wait(); err != nil {
 		if e, ok := err.(*exec.ExitError); ok && e.ExitCode() == 0 {
 			return nil
 		}

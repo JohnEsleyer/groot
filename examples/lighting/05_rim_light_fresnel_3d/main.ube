@@ -1,0 +1,124 @@
+package main
+
+import "groot/app" as app
+import "groot/math" as math
+import "groot/render3d" as render3d
+import "groot/platform3d" as platform3d
+import "groot/color" as color
+import "groot/input" as input
+import "groot/trace" as trace
+
+struct HologramCube {
+    pos:    math::Vec3,
+    normal: math::Vec3,
+    scale:  f32,
+    angle:  f32
+}
+
+fn main() {
+    let mut game = app::app_new_from_manifest()
+    game.start()
+
+    let cube_mesh = platform3d::load_cube_mesh()
+    let plane_mesh = platform3d::load_plane_mesh(80.0)
+
+    let mut cam = render3d::Camera3D{
+        position: math::vec3(0.0, 16.0, 36.0),
+        target:   math::vec3(0.0, 3.0, 0.0),
+        up:       math::vec3(0.0, 1.0, 0.0),
+        fov_y:    0.785398,
+        aspect:   1280.0 / 720.0,
+        near:     0.1,
+        far:      300.0
+    }
+
+    // Build concentric rings of geometric holographic cubes
+    let mut cubes = []HologramCube{}
+    let mut ring = 1
+    while ring <= 4 {
+        let count = ring * 8
+        let radius = (ring as f32) * 4.5
+        let mut i = 0
+        while i < count {
+            let a = ((i as f32) / (count as f32)) * 6.283185
+            let px = math::sin(a) * radius
+            let pz = math::cos(a) * radius
+            let py = 2.0 + (ring as f32) * 1.2
+
+            // Normal points outwards from ring center
+            let norm = math::vec3(px, 0.0, pz).normalized()
+            cubes.push(HologramCube{
+                pos:    math::vec3(px, py, pz),
+                normal: move norm,
+                scale:  1.4 - (ring as f32) * 0.15,
+                angle:  a
+            })
+            i += 1
+        }
+        ring += 1
+    }
+
+    let mut t: f32 = 0.0
+
+    while game.is_running {
+        game.begin_frame()
+        if game.input.is_key_pressed(input::key_escape()) {
+            game.stop()
+        }
+
+        let dt = trace::dt()
+        t += dt * 0.8
+
+        // Orbit camera to observe dynamic Fresnel shift from different angles
+        cam.position.x = math::sin(t * 0.4) * 36.0
+        cam.position.z = math::cos(t * 0.4) * 36.0
+
+        arena {
+            platform3d::set_camera(cam.view_projection(), cam.position)
+            platform3d::set_directional_light(math::vec3(-0.4, -1.0, -0.4), color::white(), 0.7)
+
+            // Ground grid floor
+            let mut ground_inst = []math::Mat4{}
+            ground_inst.push(math::mat4_translate(0.0, 0.0, 0.0))
+            platform3d::draw_instances(plane_mesh, ground_inst)
+
+            let mut models = []math::Mat4{}
+            let mut tints = []color::Color{}
+
+            let mut i = 0
+            while i < cubes.len {
+                let p = cubes[i].pos
+                let float_y = p.y + math::sin(t * 2.0 + cubes[i].angle) * 0.6
+
+                // Rotate cube around its axis
+                let rot = math::quat_from_axis_angle(math::vec3(0.0, 1.0, 0.0), t + cubes[i].angle).to_mat4()
+                let scl = math::mat4_scale(cubes[i].scale, cubes[i].scale, cubes[i].scale)
+                let model = math::mat4_mul(math::mat4_translate(p.x, float_y, p.z), math::mat4_mul(rot, scl))
+
+                // View vector from cube to camera
+                let view_dir = math::vec3(cam.position.x - p.x, cam.position.y - float_y, cam.position.z - p.z).normalized()
+
+                // N dot V for rim detection
+                let mut ndotv = cubes[i].normal.dot(view_dir)
+                if ndotv < 0.0 { ndotv = -ndotv } // Double-sided rim
+                if ndotv > 1.0 { ndotv = 1.0 }
+
+                // Fresnel glow factor: (1 - ndotv)^3
+                let inv = 1.0 - ndotv
+                let fresnel = inv * inv * inv
+
+                // Base deep obsidian body with glowing neon cyan/magenta rim
+                let r = 0.08 + fresnel * 0.20
+                let g = 0.12 + fresnel * 0.85
+                let b = 0.20 + fresnel * 0.80
+
+                models.push(model)
+                tints.push(color::rgba(r, g, b, 1.0))
+                i += 1
+            }
+
+            platform3d::draw_instances_tinted(cube_mesh, models, tints)
+            platform3d::present(0.02, 0.02, 0.04)
+        }
+    }
+}

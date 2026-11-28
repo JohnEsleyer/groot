@@ -1,0 +1,121 @@
+package main
+
+import "groot/app" as app
+import "groot/math" as math
+import "groot/render3d" as render3d
+import "groot/platform3d" as platform3d
+import "groot/color" as color
+import "groot/input" as input
+import "groot/trace" as trace
+
+struct Pedestal {
+    x: f32,
+    y: f32,
+    z: f32,
+    model: math::Mat4
+}
+
+fn sqrt_approx(val: f32) -> f32 {
+    if val <= 0.0 { return 0.0 }
+    let mut g = val * 0.5
+    let mut i = 0
+    while i < 10 {
+        g = 0.5 * (g + val / g)
+        i += 1
+    }
+    return g
+}
+
+fn main() {
+    let mut game = app::app_new_from_manifest()
+    game.start()
+
+    let cube_mesh = platform3d::load_cube_mesh()
+    let plane_mesh = platform3d::load_plane_mesh(120.0)
+
+    let mut cam = render3d::Camera3D{
+        position: math::vec3(0.0, 28.0, 48.0),
+        target:   math::vec3(0.0, 1.0, 0.0),
+        up:       math::vec3(0.0, 1.0, 0.0),
+        fov_y:    0.785398,
+        aspect:   1280.0 / 720.0,
+        near:     0.1,
+        far:      400.0
+    }
+
+    // 20x20 grid of pedestals = 400 instances
+    let mut pedestals = []Pedestal{}
+    let mut zi = -10
+    while zi < 10 {
+        let mut xi = -10
+        while xi < 10 {
+            let px = (xi as f32) * 4.0 + 2.0
+            let pz = (zi as f32) * 4.0 + 2.0
+            let py = 0.5
+            let m = math::mat4_mul(math::mat4_translate(px, py, pz), math::mat4_scale(2.2, 1.0, 2.2))
+            pedestals.push(Pedestal{ x: px, y: py, z: pz, model: move m })
+            xi += 1
+        }
+        zi += 1
+    }
+
+    let mut t: f32 = 0.0
+
+    while game.is_running {
+        game.begin_frame()
+        if game.input.is_key_pressed(input::key_escape()) {
+            game.stop()
+        }
+
+        let dt = trace::dt()
+        t += dt * 1.5
+
+        // Bouncing moving light orb coordinates
+        let light_x = math::sin(t * 1.2) * 24.0
+        let light_y = 2.5 + (if math::sin(t * 2.5) < 0.0 { -math::sin(t * 2.5) } else { math::sin(t * 2.5) }) * 6.0
+        let light_z = math::cos(t * 0.9) * 24.0
+
+        arena {
+            platform3d::set_camera(cam.view_projection(), cam.position)
+            // Soft directional fill to preserve baseline ambient
+            platform3d::set_directional_light(math::vec3(-0.3, -1.0, -0.3), color::rgba(0.15, 0.18, 0.25, 1.0), 0.6)
+
+            // Ground plane
+            let mut ground_inst = []math::Mat4{}
+            ground_inst.push(math::mat4_translate(0.0, 0.0, 0.0))
+            platform3d::draw_instances(plane_mesh, ground_inst)
+
+            let mut models = []math::Mat4{}
+            let mut tints = []color::Color{}
+
+            // 1. Draw glowing light orb
+            let orb_model = math::mat4_mul(math::mat4_translate(light_x, light_y, light_z), math::mat4_scale(1.2, 1.2, 1.2))
+            models.push(orb_model)
+            tints.push(color::rgba(1.0, 0.9, 0.4, 1.0)) // Glowing gold
+
+            // 2. Compute attenuated illumination for all 400 pedestals
+            let mut i = 0
+            while i < pedestals.len {
+                let dx = pedestals[i].x - light_x
+                let dy = pedestals[i].y - light_y
+                let dz = pedestals[i].z - light_z
+                let dist = sqrt_approx(dx * dx + dy * dy + dz * dz)
+
+                // Attenuation formula: 1 / (1 + 0.08*d + 0.015*d^2)
+                let att = 1.0 / (1.0 + 0.08 * dist + 0.015 * dist * dist)
+
+                // Baseline ambient color + point light color contribution
+                let r = 0.08 + att * 0.95
+                let g = 0.10 + att * 0.70
+                let b = 0.15 + att * 0.25
+
+                models.push(pedestals[i].model)
+                tints.push(color::rgba(r, g, b, 1.0))
+                i += 1
+            }
+
+            platform3d::draw_instances_tinted(cube_mesh, models, tints)
+            platform3d::present(0.02, 0.02, 0.04)
+        }
+    }
+}

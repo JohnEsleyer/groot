@@ -290,7 +290,8 @@ impl TelemetryServer {
             };
 
             for pkt in packets_to_send {
-                let mut header = [MSG_PACKET, 0, 128];
+                let len_bytes = 128u16.to_le_bytes();
+                let header = [MSG_PACKET, len_bytes[0], len_bytes[1]];
                 let _ = stream_write.write_all(&header);
                 if stream_write.write_all(&pkt).is_err() {
                     return Ok(());

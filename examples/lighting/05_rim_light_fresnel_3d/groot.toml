@@ -1,0 +1,10 @@
+[project]
+name = "lighting_rim_fresnel_3d"
+version = "0.1.0"
+
+[window]
+width = 1280
+height = 720
+title = "Groot Lighting — View-Dependent Rim Lighting & Fresnel"
+vsync = true
+fps = 60

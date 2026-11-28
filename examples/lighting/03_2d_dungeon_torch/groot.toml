@@ -1,0 +1,10 @@
+[project]
+name = "lighting_2d_torch"
+version = "0.1.0"
+
+[window]
+width = 960
+height = 640
+title = "Groot Lighting — 2D Dungeon Torch & Dynamic Falloff"
+vsync = true
+fps = 60
