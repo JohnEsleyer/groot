@@ -6,6 +6,7 @@ import "groot/render3d" as render3d
 import "groot/platform3d" as platform3d
 import "groot/color" as color
 import "groot/input" as input
+import "groot/trace" as trace
 
 struct Particle3D {
     pos:      math::Vec3,
@@ -77,7 +78,6 @@ fn main() {
         i += 1
     }
 
-    let dt: f32 = 0.016666
     let gravity: f32 = 9.8
     let mut frame = 0
     let mut cam_angle: f32 = 0.0
@@ -88,7 +88,8 @@ fn main() {
             game.stop()
         }
 
-        cam_angle += 0.008
+        let dt: f32 = trace::dt()
+        cam_angle += 0.5 * dt
         cam.position.x = math::sin(cam_angle) * 18.0
         cam.position.z = math::cos(cam_angle) * 18.0
 

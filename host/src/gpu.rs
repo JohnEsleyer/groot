@@ -1,6 +1,7 @@
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use wgpu::util::DeviceExt;
 use wgpu::*;
 
@@ -88,7 +89,19 @@ pub struct GpuRenderer {
     pub stats_triangles_rendered: u32,
     pub stats_draw_calls: u16,
 
+    pub adapter_name: String,
+    pub frame_stats: GpuFrameStats,
     pub clear_color: [f64; 4],
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct GpuFrameStats {
+    pub upload_us: u32,
+    pub encode_us: u32,
+    pub present_wait_us: u32,
+    pub buffer_reallocs: u16,
+    pub mesh_uploads: u16,
+    pub surface_reconfigs: u16,
 }
 
 impl GpuRenderer {
@@ -126,6 +139,8 @@ impl GpuRenderer {
             stats_instances_3d: 0,
             stats_triangles_rendered: 0,
             stats_draw_calls: 0,
+            adapter_name: "uninitialized".into(),
+            frame_stats: GpuFrameStats::default(),
             clear_color: [0.06, 0.06, 0.09, 1.0],
         }
     }
@@ -145,6 +160,8 @@ impl GpuRenderer {
             force_fallback_adapter: false,
         }))
         .expect("No suitable GPU adapter found");
+
+        self.adapter_name = adapter.get_info().name;
 
         let (device, queue) = pollster::block_on(adapter.request_device(
             &DeviceDescriptor {
@@ -645,6 +662,7 @@ impl GpuRenderer {
             });
             self.vertex_buffer = Some(buffer);
             self.vertex_buffer_capacity = new_cap;
+            self.frame_stats.buffer_reallocs += 1;
         }
 
         if let Some(buf) = self.vertex_buffer.as_ref() {
@@ -683,6 +701,7 @@ impl GpuRenderer {
             },
         );
 
+        self.frame_stats.mesh_uploads += 1;
         id
     }
 
@@ -769,9 +788,16 @@ impl GpuRenderer {
             return;
         };
 
+        // Reset per-frame counters (preserve reallocs/mesh_uploads accumulated before draw_batch_all)
+        self.frame_stats.upload_us = 0;
+        self.frame_stats.encode_us = 0;
+        self.frame_stats.present_wait_us = 0;
+
+        let t_pres_start = Instant::now();
         let output = match surface.get_current_texture() {
             Ok(tex) => tex,
             Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
+                self.frame_stats.surface_reconfigs += 1;
                 let size = if let (Some(device), Some(config)) = (self.device.as_ref(), self.config.as_ref()) {
                     surface.configure(device, config);
                     Some((config.width, config.height))
@@ -790,6 +816,7 @@ impl GpuRenderer {
         let view = output.texture.create_view(&TextureViewDescriptor::default());
 
         // Zero-allocation batch instance buffer sync
+        let t_up_start = Instant::now();
         if !self.instance_data_staging.is_empty() {
             let byte_len = self.instance_data_staging.len() * std::mem::size_of::<f32>();
             if self.instance_buffer_3d.is_none() || byte_len > self.instance_buffer_capacity_3d {
@@ -802,12 +829,15 @@ impl GpuRenderer {
                 });
                 self.instance_buffer_3d = Some(buffer);
                 self.instance_buffer_capacity_3d = new_cap;
+                self.frame_stats.buffer_reallocs += 1;
             }
             if let Some(buf) = self.instance_buffer_3d.as_ref() {
                 queue.write_buffer(buf, 0, bytemuck::cast_slice(&self.instance_data_staging));
             }
         }
+        self.frame_stats.upload_us = t_up_start.elapsed().as_micros() as u32;
 
+        let t_enc_start = Instant::now();
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
             label: Some("Groot Frame Encoder"),
         });
@@ -884,9 +914,16 @@ impl GpuRenderer {
         }
 
         queue.submit(std::iter::once(encoder.finish()));
+        self.frame_stats.encode_us = t_enc_start.elapsed().as_micros() as u32;
+
         self.pending_draws_3d.clear();
         self.instance_data_staging.clear();
+
+        let t_pres_wait = Instant::now();
         output.present();
+        self.frame_stats.present_wait_us = (t_pres_start.elapsed().as_micros() as u32)
+            .saturating_sub(self.frame_stats.upload_us + self.frame_stats.encode_us)
+            .max(t_pres_wait.elapsed().as_micros() as u32);
 
         self.stats_instances_3d = instances_rendered;
         self.stats_triangles_rendered = triangles_rendered;

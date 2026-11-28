@@ -6,12 +6,15 @@ import "groot/render3d" as render3d
 import "groot/platform3d" as platform3d
 import "groot/color" as color
 
+let mut g_cube_mesh: i32 = -1
+
 export fn init() {
+    g_cube_mesh = platform3d::load_cube_mesh()
     println("[guest] 3D world initialized")
 }
 
 export fn tick(dt: f32) -> bool {
-    let cube_mesh = platform3d::load_cube_mesh()
+    let cube_mesh = if g_cube_mesh >= 0 { g_cube_mesh } else { platform3d::load_cube_mesh() }
     let mut cam = render3d::Camera3D{
         position: math::vec3(0.0, 18.0, 36.0),
         target: math::vec3(0.0, 0.0, 0.0),

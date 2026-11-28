@@ -6,6 +6,7 @@ import "groot/render3d" as render3d
 import "groot/platform3d" as platform3d
 import "groot/color" as color
 import "groot/input" as input
+import "groot/trace" as trace
 
 fn main() {
     let mut game = app::app_new(app::EngineConfig{

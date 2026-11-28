@@ -27,6 +27,22 @@ interface input {
     is-mouse-down: func(button: u32) -> bool;
     mouse-x: func() -> f32;
     mouse-y: func() -> f32;
+    /// Returns a compact input snapshot in a single ABI call.
+    /// Layout (little-endian bytes):
+    ///   [0..32]  key-words: 4×u64 bitmask for key codes 0..255
+    ///            bit N of word (N/64) = key N is currently held
+    ///   [32..33] mouse-buttons: u8 bitmask (bit 0=left, 1=right, 2=middle)
+    ///   [33..37] mouse-x: f32
+    ///   [37..41] mouse-y: f32
+    get-input-snapshot: func() -> list<u8>;
+}
+
+interface trace {
+    log: func(level: u8, tag: string, msg: string);
+    span-begin: func(name: string);
+    span-end: func();
+    metric-u32: func(name: string, value: u32);
+    delta-time: func() -> f32;
 }
 
 /// Manifest ABI — host exposes project configuration from groot.toml so that
@@ -42,6 +58,7 @@ world groot-runner {
     import gpu;
     import gpu3d;
     import input;
+    import trace;
     import manifest;
     include wasi:cli/command@0.2.0;
 }

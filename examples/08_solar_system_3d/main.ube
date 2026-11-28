@@ -6,6 +6,7 @@ import "groot/render3d" as render3d
 import "groot/platform3d" as platform3d
 import "groot/color" as color
 import "groot/input" as input
+import "groot/trace" as trace
 
 fn main() {
     let mut game = app::app_new(app::EngineConfig{
@@ -36,7 +37,7 @@ fn main() {
             game.stop()
         }
 
-        t += 0.02
+        t += trace::dt()
 
         // Slowly pan camera in an inclined orbit
         cam.position.x = math::sin(t * 0.15) * 80.0

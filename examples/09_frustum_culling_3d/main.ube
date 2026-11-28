@@ -6,6 +6,7 @@ import "groot/render3d" as render3d
 import "groot/platform3d" as platform3d
 import "groot/color" as color
 import "groot/input" as input
+import "groot/trace" as trace
 
 struct Pillar {
     bounds: math::AABB3D,
@@ -76,7 +77,7 @@ fn main() {
             game.stop()
         }
 
-        angle += 0.015
+        angle += trace::dt() * 0.9
 
         // Fly camera in a sweeping circle around the pillars
         cam.position.x = math::sin(angle) * 55.0

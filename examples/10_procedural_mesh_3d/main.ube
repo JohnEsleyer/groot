@@ -6,6 +6,7 @@ import "groot/render3d" as render3d
 import "groot/platform3d" as platform3d
 import "groot/color" as color
 import "groot/input" as input
+import "groot/trace" as trace
 
 // Builds one triangle as 3 vertices of (position, normal, uv) = 24 floats.
 // Fixed arrays are copy types, so the data can be returned without an arena.
@@ -99,7 +100,7 @@ fn main() {
             game.stop()
         }
 
-        angle += 0.025
+        angle += trace::dt() * 1.5
 
         arena {
             platform3d::set_camera(cam.view_projection(), cam.position)

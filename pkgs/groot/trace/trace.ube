@@ -1,0 +1,30 @@
+package trace
+
+extern "ube:graphics/trace@0.2.0" fn "log"        host_trace_log(level: i32, t_ptr: i32, t_len: i32, m_ptr: i32, m_len: i32)
+extern "ube:graphics/trace@0.2.0" fn "span-begin" host_span_begin(n_ptr: i32, n_len: i32)
+extern "ube:graphics/trace@0.2.0" fn "span-end"   host_span_end()
+extern "ube:graphics/trace@0.2.0" fn "delta-time" host_delta_time() -> f32
+
+pub fn info(view tag: string, view msg: string) {
+    host_trace_log(0, tag.ptr, tag.len, msg.ptr, msg.len)
+}
+
+pub fn warn(view tag: string, view msg: string) {
+    host_trace_log(1, tag.ptr, tag.len, msg.ptr, msg.len)
+}
+
+pub fn err(view tag: string, view msg: string) {
+    host_trace_log(2, tag.ptr, tag.len, msg.ptr, msg.len)
+}
+
+pub fn begin(view name: string) {
+    host_span_begin(name.ptr, name.len)
+}
+
+pub fn end() {
+    host_span_end()
+}
+
+pub fn dt() -> f32 {
+    return host_delta_time()
+}
